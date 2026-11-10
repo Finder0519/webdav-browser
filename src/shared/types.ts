@@ -54,6 +54,11 @@ export interface DownloadInterrupted {
   message: string
 }
 
+// 外部播放器配置（自定义播放器可执行文件路径，可为空表示用系统默认）。
+export interface PlayerConfig {
+  customPlayer: string
+}
+
 // 单个下载任务的最终结果。
 export type DownloadResult =
   | { status: 'saved'; path: string }
@@ -99,4 +104,10 @@ export interface ElectronApi {
   // 文本读写
   readTextFile: (connectionId: string, path: string) => Promise<string>
   writeTextFile: (connectionId: string, path: string, content: string) => Promise<void>
+  // 用本地播放器打开远程媒体（流式、可拖动进度），返回实际使用的播放器名。
+  openWithPlayer: (connectionId: string, path: string) => Promise<string>
+  // 播放器设置：读取/保存自定义播放器路径，选择播放器可执行文件（取消返回 null）。
+  getPlayerConfig: () => Promise<PlayerConfig>
+  setPlayerConfig: (customPlayer: string) => Promise<PlayerConfig>
+  choosePlayerBinary: () => Promise<string | null>
 }

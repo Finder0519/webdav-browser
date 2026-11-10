@@ -17,6 +17,7 @@ import ConnectionDialog from './components/ConnectionDialog'
 import PromptDialog from './components/PromptDialog'
 import EditorModal from './components/EditorModal'
 import PreviewModal from './components/PreviewModal'
+import SettingsDialog from './components/SettingsDialog'
 
 interface PromptConfig {
   title: string
@@ -56,6 +57,7 @@ export default function App() {
   const [preview, setPreview] = useState<{ entry: WebDavEntry; kind: 'image' | 'audio' | 'video'; url: string } | null>(
     null
   )
+  const [playerSettingsOpen, setPlayerSettingsOpen] = useState(false)
 
   // 下载任务列表：多任务并行，id 由渲染进程生成供事件对应。
   const [downloadTasks, setDownloadTasks] = useState<DownloadTask[]>([])
@@ -288,6 +290,17 @@ export default function App() {
     setDownloadTasks((prev) => prev.map((t) => (t.id === id ? { ...t, ...patch } : t)))
   }
 
+  async function openInPlayer() {
+    if (!selectedId || !selectedEntry) return
+    if (fileKind(selectedEntry.name) !== 'video' && fileKind(selectedEntry.name) !== 'audio') return
+    try {
+      const name = await window.api.openWithPlayer(selectedId, selectedEntry.path)
+      window.alert(`已用本地播放器（${name}）打开`)
+    } catch (e) {
+      window.alert('外部播放器打开失败：' + errMsg(e))
+    }
+  }
+
   function downloadEntry() {
     if (!selectedId || !selectedEntry) return
     const entry = selectedEntry
@@ -416,6 +429,8 @@ export default function App() {
         onCopy={copyEntry}
         onMove={moveEntry}
         onDownload={downloadEntry}
+        onOpenInPlayer={openInPlayer}
+        onOpenPlayerSettings={() => setPlayerSettingsOpen(true)}
         downloadTasks={downloadTasks}
         onDownloadControl={controlDownload}
         onDismissDownload={dismissDownload}
@@ -454,9 +469,18 @@ export default function App() {
         />
       )}
 
-      {preview && (
-        <PreviewModal fileName={preview.entry.name} kind={preview.kind} url={preview.url} onClose={() => setPreview(null)} />
+      {preview && selectedId && (
+        <PreviewModal
+          fileName={preview.entry.name}
+          kind={preview.kind}
+          url={preview.url}
+          connectionId={selectedId}
+          path={preview.entry.path}
+          onClose={() => setPreview(null)}
+        />
       )}
+
+      {playerSettingsOpen && <SettingsDialog onClose={() => setPlayerSettingsOpen(false)} />}
 
       {dirPick && selectedId && (
         <DirPickerDialog

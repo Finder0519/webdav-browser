@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import type { MouseEvent as ReactMouseEvent } from 'react'
 import { breadcrumb, normalizePath, parentPath } from '@shared/normalize'
 import { fileKind } from '@shared/filekind'
 import type { DownloadControlAction, WebDavEntry, WebDavListing } from '@shared/types'
@@ -27,6 +28,8 @@ interface Props {
   onCopy: () => void
   onMove: () => void
   onDownload: () => void
+  onOpenInPlayer: () => void
+  onOpenPlayerSettings: () => void
 }
 
 // 下载任务展示状态（speed 为字节/秒，经平滑处理）。
@@ -79,14 +82,43 @@ export default function FilePanel({
   rootPath, path, listing, loading, error, selectedEntry,
   downloadTasks, onDownloadControl, onDismissDownload,
   onNavigate, onRefresh, onCopyPath, copyPathTarget, onSelect, onOpen,
-  onCreateFolder, onCreateFile, onUpload, onDelete, onRename, onCopy, onMove, onDownload
+  onCreateFolder, onCreateFile, onUpload, onDelete, onRename, onCopy, onMove, onDownload, onOpenInPlayer,
+  onOpenPlayerSettings
 }: Props) {
   const [copied, setCopied] = useState(false)
+  // 右键菜单：anchor 为触发点的屏幕坐标，entry 为触发对象（null 表示空白区域/目录级菜单）。
+  const [menu, setMenu] = useState<{ x: number; y: number; entry: WebDavEntry | null } | null>(null)
   useEffect(() => {
     if (!copied) return
     const timer = setTimeout(() => setCopied(false), 1500)
     return () => clearTimeout(timer)
   }, [copied])
+
+  // 打开菜单期间：点击任意处 / Esc / 失焦 / 滚动均关闭菜单。
+  useEffect(() => {
+    if (!menu) return
+    const close = () => setMenu(null)
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') close()
+    }
+    document.addEventListener('click', close)
+    document.addEventListener('contextmenu', close)
+    document.addEventListener('keydown', onKey)
+    window.addEventListener('blur', close)
+    return () => {
+      document.removeEventListener('click', close)
+      document.removeEventListener('contextmenu', close)
+      document.removeEventListener('keydown', onKey)
+      window.removeEventListener('blur', close)
+    }
+  }, [menu])
+
+  function openMenu(e: ReactMouseEvent, entry: WebDavEntry | null) {
+    e.preventDefault()
+    e.stopPropagation()
+    if (entry) onSelect(entry)
+    setMenu({ x: e.clientX, y: e.clientY, entry })
+  }
 
   const atRoot = normalizePath(path) === normalizePath(rootPath)
   const crumbs = breadcrumb(rootPath, path)
@@ -95,6 +127,55 @@ export default function FilePanel({
   const canOpen = Boolean(
     selectedEntry && (selectedEntry.type === 'directory' || fileKind(selectedEntry.name) !== 'other')
   )
+  // 仅音频/视频可用本地播放器打开（流式、可拖动进度）。
+  const selectedKind = selectedEntry ? fileKind(selectedEntry.name) : 'other'
+  const canExternal = selectedEntry != null && (selectedKind === 'video' || selectedKind === 'audio')
+
+  type MenuItem =
+    | { type: 'item'; id: string; label: string; danger?: boolean; onClick: () => void }
+    | { type: 'divider' }
+
+  function menuItems(): MenuItem[] {
+    const close = () => setMenu(null)
+    const entry = menu?.entry
+    if (!entry) {
+      // 空白区域：目录级操作。
+      return [
+        { type: 'item', id: 'refresh', label: '刷新', onClick: () => { close(); onRefresh() } },
+        { type: 'divider' },
+        { type: 'item', id: 'mkdir', label: '新建文件夹', onClick: () => { close(); onCreateFolder() } },
+        { type: 'item', id: 'mkfile', label: '新建文本文件', onClick: () => { close(); onCreateFile() } },
+        { type: 'item', id: 'upload', label: '上传', onClick: () => { close(); onUpload() } }
+      ]
+    }
+    const kind = fileKind(entry.name)
+    const items: MenuItem[] = [
+      { type: 'item', id: 'open', label: '打开', onClick: () => { close(); onOpen(entry) } },
+      { type: 'item', id: 'copypath', label: '复制路径', onClick: () => { close(); onCopyPath() } }
+    ]
+    if (entry.type === 'file') {
+      if (kind === 'video' || kind === 'audio') {
+        items.push({
+          type: 'item',
+          id: 'external',
+          label: '用外部播放器打开',
+          onClick: () => { close(); onOpenInPlayer() }
+        })
+      }
+      items.push({ type: 'item', id: 'download', label: '下载', onClick: () => { close(); onDownload() } })
+    }
+    items.push({ type: 'divider' })
+    items.push(
+      { type: 'item', id: 'rename', label: '重命名', onClick: () => { close(); onRename() } },
+      { type: 'item', id: 'copy', label: '复制', onClick: () => { close(); onCopy() } },
+      { type: 'item', id: 'move', label: '移动', onClick: () => { close(); onMove() } },
+      { type: 'item', id: 'delete', label: '删除', danger: true, onClick: () => { close(); onDelete() } }
+    )
+    return items
+  }
+
+  const menuLeft = menu ? Math.min(menu.x, window.innerWidth - 190) : 0
+  const menuTop = menu ? Math.min(menu.y, window.innerHeight - 220) : 0
 
   return (
     <section className="file-panel">
@@ -163,6 +244,17 @@ export default function FilePanel({
         </button>
         <button className="btn" onClick={onDownload} disabled={!hasSelection} title="下载所选文件（可多任务并行）">
           下载
+        </button>
+        <button
+          className="btn"
+          onClick={onOpenInPlayer}
+          disabled={!canExternal}
+          title={canExternal ? '用本地播放器（PotPlayer / VLC / IINA / MPV）流式打开，可拖动进度' : '仅音频/视频可用本地播放器打开'}
+        >
+          外部播放器
+        </button>
+        <button className="btn" onClick={onOpenPlayerSettings} title="设置本地播放器（如 PotPlayer）安装位置">
+          播放器设置
         </button>
         <button
           className="btn"
@@ -248,7 +340,7 @@ export default function FilePanel({
         </div>
       )}
 
-      <div className="file-body" onClick={() => onSelect(null)}>
+      <div className="file-body" onClick={() => onSelect(null)} onContextMenu={(e) => openMenu(e, null)}>
         {loading && <div className="state">加载中…</div>}
         {!loading && error && <div className="state error">加载失败：{error}</div>}
         {!loading && !error && listing && listing.entries.length === 0 && (
@@ -281,6 +373,7 @@ export default function FilePanel({
                     onSelect(entry)
                     onOpen(entry)
                   }}
+                  onContextMenu={(e) => openMenu(e, entry)}
                 >
                   <td>
                     <span className="entry-icon">{entryIcon(entry)}</span>
@@ -294,6 +387,25 @@ export default function FilePanel({
           </table>
         )}
       </div>
+
+      {menu && (
+        <div
+          className="context-menu"
+          style={{ left: menuLeft, top: menuTop }}
+          onContextMenu={(e) => e.preventDefault()}
+          onClick={(e) => e.stopPropagation()}
+        >
+          {menuItems().map((item) =>
+            item.type === 'divider' ? (
+              <div className="menu-divider" key={item.type} />
+            ) : (
+              <button key={item.id} className={`menu-item${item.danger ? ' danger' : ''}`} onClick={item.onClick}>
+                {item.label}
+              </button>
+            )
+          )}
+        </div>
+      )}
     </section>
   )
 }

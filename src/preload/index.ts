@@ -43,7 +43,11 @@ const api: ElectronApi = {
   controlDownload: (id, action) => ipcRenderer.invoke('files:download:control', id, action),
 
   readTextFile: (connectionId, path) => ipcRenderer.invoke('text:read', connectionId, path),
-  writeTextFile: (connectionId, path, content) => ipcRenderer.invoke('text:write', connectionId, path, content)
+  writeTextFile: (connectionId, path, content) => ipcRenderer.invoke('text:write', connectionId, path, content),
+  openWithPlayer: (connectionId, path) => ipcRenderer.invoke('player:open', connectionId, path),
+  getPlayerConfig: () => ipcRenderer.invoke('player:getConfig'),
+  setPlayerConfig: (customPlayer) => ipcRenderer.invoke('player:setConfig', customPlayer),
+  choosePlayerBinary: () => ipcRenderer.invoke('player:choose')
 }
 
 contextBridge.exposeInMainWorld('api', api)

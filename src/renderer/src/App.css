@@ -400,6 +400,24 @@ body {
   font-size: 13px;
 }
 
+.field-hint {
+  color: var(--muted);
+  font-size: 12px;
+  margin: 0 0 14px;
+  line-height: 1.5;
+}
+
+.field-row {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+.field-row input {
+  flex: 1;
+  min-width: 0;
+}
+
 .dialog-foot {
   display: flex;
   align-items: center;
@@ -505,6 +523,51 @@ body {
 /* ---------- 列表选中 ---------- */
 .file-table tbody tr.selected {
   background: var(--selected);
+}
+
+/* ---------- 右键菜单 ---------- */
+.context-menu {
+  position: fixed;
+  z-index: 100;
+  min-width: 180px;
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.25);
+  padding: 6px;
+  user-select: none;
+}
+
+.menu-item {
+  display: block;
+  width: 100%;
+  text-align: left;
+  border: none;
+  background: transparent;
+  color: var(--fg);
+  padding: 8px 12px;
+  font-size: 13px;
+  border-radius: 6px;
+  cursor: pointer;
+}
+
+.menu-item:hover {
+  background: var(--hover);
+}
+
+.menu-item.danger {
+  color: var(--danger);
+}
+
+.menu-item.danger:hover {
+  background: var(--danger);
+  color: var(--primary-fg);
+}
+
+.menu-divider {
+  height: 1px;
+  background: var(--border);
+  margin: 6px 4px;
 }
 
 /* ---------- 弹框尺寸 ---------- */
@@ -656,6 +719,25 @@ body {
   max-height: 100%;
   object-fit: contain;
   border-radius: 8px;
+}
+
+.preview-external {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+  max-width: 100%;
+  max-height: 100%;
+}
+
+.preview-external video,
+.preview-external audio {
+  max-width: 100%;
+  max-height: calc(100vh - 200px);
+}
+
+.preview-play-btn {
+  flex-shrink: 0;
 }
 
 .preview-audio {

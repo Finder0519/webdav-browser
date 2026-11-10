@@ -3,6 +3,7 @@ import { join } from 'path'
 import * as store from './connections'
 import * as webdav from './webdav'
 import { createMediaResponse } from './media'
+import * as player from './localplayer'
 import { MEDIA_SCHEME } from '../shared/filekind'
 import type { AppInfo, Connection, ConnectionDraft } from '../shared/types'
 
@@ -167,6 +168,22 @@ function registerIpcHandlers(): void {
   ipcMain.handle('text:read', (_e, connectionId: string, path: string) =>
     webdav.readTextFile(requireConn(connectionId), path)
   )
+
+  ipcMain.handle('player:open', async (_e, connectionId: string, path: string) => {
+    requireConn(connectionId) // 校验连接存在
+    const url = await player.proxyUrl(connectionId, path)
+    return player.openVideoWithPlayer(url)
+  })
+  ipcMain.handle('player:getConfig', () => player.getPlayerConfig())
+  ipcMain.handle('player:setConfig', (_e, customPlayer: string) => player.setPlayerConfig(customPlayer))
+  ipcMain.handle('player:choose', async () => {
+    const result = await dialog.showOpenDialog({
+      title: '选择播放器可执行文件',
+      properties: ['openFile'],
+      filters: [{ name: '播放器', extensions: ['exe', 'app', 'command', 'bin'] }]
+    })
+    return result.canceled || result.filePaths.length === 0 ? null : result.filePaths[0]
+  })
   ipcMain.handle('text:write', (_e, connectionId: string, path: string, content: string) =>
     webdav.writeTextFile(requireConn(connectionId), path, content)
   )
@@ -195,3 +212,5 @@ app.whenReady().then(() => {
 app.on('window-all-closed', () => {
   if (process.platform !== 'darwin') app.quit()
 })
+
+app.on('will-quit', () => player.closeProxy())
