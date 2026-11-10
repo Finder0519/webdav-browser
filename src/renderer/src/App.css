@@ -481,14 +481,14 @@ body {
   max-width: 92vw;
 }
 
-.preview-head {
+.modal-head {
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 12px;
 }
 
-.preview-head h3 {
+.modal-head h3 {
   margin: 0;
   overflow: hidden;
   text-overflow: ellipsis;

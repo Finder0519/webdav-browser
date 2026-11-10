@@ -9,7 +9,7 @@ export default function PreviewModal({ fileName, kind, url, onClose }: Props) {
   return (
     <div className="dialog-mask">
       <div className="dialog dialog-lg preview-dialog">
-        <div className="preview-head">
+        <div className="modal-head">
           <h3>{fileName}</h3>
           <button className="icon-btn" title="关闭" onClick={onClose}>
             ✕

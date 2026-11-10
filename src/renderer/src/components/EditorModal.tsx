@@ -9,9 +9,14 @@ interface Props {
 
 export default function EditorModal({ fileName, content, saving, onChange, onSave, onClose }: Props) {
   return (
-    <div className="dialog-mask" onMouseDown={onClose}>
-      <div className="dialog dialog-lg" onMouseDown={(e) => e.stopPropagation()}>
-        <h3>编辑：{fileName}</h3>
+    <div className="dialog-mask">
+      <div className="dialog dialog-lg">
+        <div className="modal-head">
+          <h3>编辑：{fileName}</h3>
+          <button className="icon-btn" title="关闭" onClick={onClose} disabled={saving}>
+            ✕
+          </button>
+        </div>
         <textarea
           className="editor-area"
           value={content}
