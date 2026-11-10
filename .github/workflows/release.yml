@@ -1,0 +1,94 @@
+name: Release
+
+on:
+  push:
+    branches: [main]
+    tags: ['v*']
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: macos-latest
+          - os: ubuntu-latest
+          - os: windows-latest
+    runs-on: ${{ matrix.os }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Type check
+        run: npm run typecheck
+
+      - name: Build & package
+        run: npm run dist
+
+      # 产物上传为 Actions Artifact（手动触发供下载；push 时供发布任务合并）
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: webdav-browser-${{ matrix.os }}
+          path: |
+            release/*.exe
+            release/*.dmg
+            release/*.zip
+            release/*.AppImage
+          if-no-files-found: error
+
+  # push（main 或 v* 标签）时合并三平台产物，一次性发布 GitHub Release
+  publish:
+    needs: build
+    if: github.event_name == 'push'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Download artifacts
+        uses: actions/download-artifact@v4
+        with:
+          pattern: webdav-browser-*
+          path: release
+          merge-multiple: true
+
+      # 确定 Release 标签:
+      #   推送 v* 标签 -> 直接用该标签（正式版）
+      #   推送 main    -> v<版本>-build.<构建号>，按 package.json 版本自动建 Release
+      - name: Release metadata
+        id: meta
+        shell: bash
+        run: |
+          version=$(node -p "require('./package.json').version")
+          if [ "$GITHUB_REF_TYPE" = "tag" ]; then
+            tag="$GITHUB_REF_NAME"
+          else
+            tag="v$version-build.$GITHUB_RUN_NUMBER"
+          fi
+          echo "tag=$tag" >> "$GITHUB_OUTPUT"
+
+      - name: Publish release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ steps.meta.outputs.tag }}
+          name: WebDAV 浏览器 ${{ steps.meta.outputs.tag }}
+          generate_release_notes: true
+          files: |
+            release/*.exe
+            release/*.dmg
+            release/*.zip
+            release/*.AppImage
