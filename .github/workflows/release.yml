@@ -46,7 +46,6 @@ jobs:
           path: |
             release/*.exe
             release/*.dmg
-            release/*.zip
             release/*.AppImage
           if-no-files-found: error
 
@@ -90,5 +89,4 @@ jobs:
           files: |
             release/*.exe
             release/*.dmg
-            release/*.zip
             release/*.AppImage
