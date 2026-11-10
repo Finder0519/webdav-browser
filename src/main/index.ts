@@ -1,4 +1,4 @@
-import { app, BrowserWindow, dialog, ipcMain, protocol, shell } from 'electron'
+import { app, BrowserWindow, clipboard, dialog, ipcMain, protocol, shell } from 'electron'
 import { join } from 'path'
 import * as store from './connections'
 import * as webdav from './webdav'
@@ -58,6 +58,9 @@ function createWindow(): void {
 
 function registerIpcHandlers(): void {
   ipcMain.handle('app:ping', () => 'pong')
+  ipcMain.handle('clipboard:write', (_e, text: string) => {
+    clipboard.writeText(text)
+  })
   ipcMain.handle('app:getInfo', (): AppInfo => ({
     platform: process.platform,
     versions: {

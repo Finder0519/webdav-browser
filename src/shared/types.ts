@@ -66,6 +66,8 @@ export type DownloadControlAction = 'pause' | 'resume' | 'cancel'
 export interface ElectronApi {
   ping: () => Promise<string>
   getInfo: () => Promise<AppInfo>
+  // 写入系统剪贴板。
+  copyToClipboard: (text: string) => Promise<void>
   listConnections: () => Promise<ConnectionInfo[]>
   getConnection: (id: string) => Promise<Connection | null>
   saveConnection: (draft: ConnectionDraft) => Promise<ConnectionInfo>

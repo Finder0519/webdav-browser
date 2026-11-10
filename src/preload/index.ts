@@ -6,6 +6,7 @@ import type { ConnectionDraft, DownloadInterrupted, DownloadProgress, ElectronAp
 const api: ElectronApi = {
   ping: () => ipcRenderer.invoke('app:ping'),
   getInfo: () => ipcRenderer.invoke('app:getInfo'),
+  copyToClipboard: (text) => ipcRenderer.invoke('clipboard:write', text),
 
   listConnections: () => ipcRenderer.invoke('connections:list'),
   getConnection: (id) => ipcRenderer.invoke('connections:get', id),

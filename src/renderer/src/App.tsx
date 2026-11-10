@@ -150,6 +150,13 @@ export default function App() {
     if (selectedId) load(selectedId, currentPath)
   }
 
+  // 复制路径：选中了文件/文件夹则复制其路径，否则复制当前目录路径。
+  const copyPathTarget = selectedEntry ? selectedEntry.path : currentPath
+  function copyPath() {
+    if (!copyPathTarget) return
+    void window.api.copyToClipboard(copyPathTarget)
+  }
+
   async function openEntry(entry: WebDavEntry) {
     if (!selectedId) return
     if (entry.type === 'directory') {
@@ -397,6 +404,8 @@ export default function App() {
         selectedEntry={selectedEntry}
         onNavigate={navigate}
         onRefresh={refresh}
+        onCopyPath={copyPath}
+        copyPathTarget={copyPathTarget}
         onSelect={setSelectedEntry}
         onOpen={openEntry}
         onCreateFolder={createFolder}

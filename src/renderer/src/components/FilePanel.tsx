@@ -1,3 +1,4 @@
+import { useEffect, useState } from 'react'
 import { breadcrumb, normalizePath, parentPath } from '@shared/normalize'
 import { fileKind } from '@shared/filekind'
 import type { DownloadControlAction, WebDavEntry, WebDavListing } from '@shared/types'
@@ -14,6 +15,8 @@ interface Props {
   onDismissDownload: (id: string) => void
   onNavigate: (path: string) => void
   onRefresh: () => void
+  onCopyPath: () => void
+  copyPathTarget: string
   onSelect: (entry: WebDavEntry | null) => void
   onOpen: (entry: WebDavEntry) => void
   onCreateFolder: () => void
@@ -75,9 +78,16 @@ function entryIcon(entry: WebDavEntry): string {
 export default function FilePanel({
   rootPath, path, listing, loading, error, selectedEntry,
   downloadTasks, onDownloadControl, onDismissDownload,
-  onNavigate, onRefresh, onSelect, onOpen,
+  onNavigate, onRefresh, onCopyPath, copyPathTarget, onSelect, onOpen,
   onCreateFolder, onCreateFile, onUpload, onDelete, onRename, onCopy, onMove, onDownload
 }: Props) {
+  const [copied, setCopied] = useState(false)
+  useEffect(() => {
+    if (!copied) return
+    const timer = setTimeout(() => setCopied(false), 1500)
+    return () => clearTimeout(timer)
+  }, [copied])
+
   const atRoot = normalizePath(path) === normalizePath(rootPath)
   const crumbs = breadcrumb(rootPath, path)
   const hasSelection = Boolean(selectedEntry)
@@ -154,6 +164,17 @@ export default function FilePanel({
         <button className="btn" onClick={onDownload} disabled={!hasSelection} title="下载所选文件（可多任务并行）">
           下载
         </button>
+        <button
+          className="btn"
+          disabled={!copyPathTarget}
+          title={copyPathTarget ? `复制路径：${copyPathTarget}` : '当前无可复制的路径'}
+          onClick={() => {
+            onCopyPath()
+            setCopied(true)
+          }}
+        >
+          {copied ? '✓ 已复制' : '复制路径'}
+        </button>
         <button className="btn btn-danger" onClick={onDelete} disabled={!hasSelection}>删除</button>
       </div>
 
@@ -227,7 +248,7 @@ export default function FilePanel({
         </div>
       )}
 
-      <div className="file-body">
+      <div className="file-body" onClick={() => onSelect(null)}>
         {loading && <div className="state">加载中…</div>}
         {!loading && error && <div className="state error">加载失败：{error}</div>}
         {!loading && !error && listing && listing.entries.length === 0 && (
@@ -249,8 +270,17 @@ export default function FilePanel({
                   className={`${entry.type === 'directory' ? 'row-dir' : 'row-file'}${
                     entry.path === selectedEntry?.path ? ' selected' : ''
                   }`}
-                  onClick={() => onSelect(entry)}
-                  onDoubleClick={() => onOpen(entry)}
+                  onClick={(e) => {
+                    e.stopPropagation()
+                    // 再次点击已选中行 = 取消选中。
+                    onSelect(entry.path === selectedEntry?.path ? null : entry)
+                  }}
+                  onDoubleClick={(e) => {
+                    e.stopPropagation()
+                    // 双击的第二击会切换选中，先补选中再打开，保证打开后仍有选中项。
+                    onSelect(entry)
+                    onOpen(entry)
+                  }}
                 >
                   <td>
                     <span className="entry-icon">{entryIcon(entry)}</span>
