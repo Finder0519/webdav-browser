@@ -33,7 +33,9 @@ export default function App() {
   const [editing, setEditing] = useState<Connection | null>(null)
   const [dialogOpen, setDialogOpen] = useState(false)
   const [prompt, setPrompt] = useState<PromptConfig | null>(null)
-  const [editor, setEditor] = useState<{ entry: WebDavEntry; content: string; saving: boolean } | null>(null)
+  const [editor, setEditor] = useState<{ entry: WebDavEntry; content: string; original: string; saving: boolean } | null>(
+    null
+  )
   const [preview, setPreview] = useState<{ entry: WebDavEntry; kind: 'image' | 'audio' | 'video'; url: string } | null>(
     null
   )
@@ -92,7 +94,7 @@ export default function App() {
     if (kind === 'text') {
       try {
         const content = await window.api.readTextFile(selectedId, entry.path)
-        setEditor({ entry, content, saving: false })
+        setEditor({ entry, content, original: content, saving: false })
       } catch (e) {
         window.alert('打开文件失败：' + errMsg(e))
       }
@@ -194,6 +196,12 @@ export default function App() {
     } catch (e) {
       window.alert('下载失败：' + errMsg(e))
     }
+  }
+
+  function closeEditor() {
+    if (!editor) return
+    if (editor.content !== editor.original && !window.confirm('有未保存改动，确定放弃？')) return
+    setEditor(null)
   }
 
   async function saveEditor() {
@@ -303,9 +311,9 @@ export default function App() {
           fileName={editor.entry.name}
           content={editor.content}
           saving={editor.saving}
-          onChange={(content) => setEditor({ ...editor, content })}
+          onChange={(content) => setEditor((prev) => (prev ? { ...prev, content } : prev))}
           onSave={saveEditor}
-          onClose={() => setEditor(null)}
+          onClose={closeEditor}
         />
       )}
 
