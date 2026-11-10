@@ -1,4 +1,4 @@
-# WebDAV Browser
+# WebDAV 浏览器
 
 基于 Electron 的 WebDAV 客户端。
 

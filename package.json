@@ -1,5 +1,6 @@
 {
   "name": "webdav-browser",
+  "productName": "WebDAV 浏览器",
   "version": "0.1.0",
   "description": "A WebDAV client built with Electron",
   "author": "Finder0519",
