@@ -23,12 +23,18 @@ artifactName: ${name}-${version}-${os}-${arch}.${ext}
 mac:
   icon: build/icon.icns
   category: public.app-category.utilities
+  # 暂无正式证书：ad-hoc 签名，为程序提供稳定身份（macOS 15+ 本地网络权限归属需要）
+  identity: "-"
+  entitlements: build/entitlements.mac.plist
+  entitlementsInherit: build/entitlements.mac.inherit.plist
+  # macOS 15+ 需声明本地网络用途，否则局域网访问被静默拒绝（无提示、无设置项）
+  extendInfo:
+    NSLocalNetworkUsageDescription: 用于在局域网中连接 WebDAV 服务器
   target:
     - target: dmg
       arch: [x64, arm64]
     - target: zip
       arch: [x64, arm64]
-  # 暂不签名：CI 未配置证书时 electron-builder 自动跳过签名
 
 win:
   icon: build/icon.ico
