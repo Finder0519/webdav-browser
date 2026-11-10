@@ -1,15 +1,50 @@
-// 主进程与渲染进程之间共享的类型定义。
-// 这里只放类型（type-only），构建时会被擦除，不产生运行时依赖。
+// 主进程与渲染进程之间共享的类型定义（仅类型，构建时擦除）。
 
-// 应用信息，由主进程通过 IPC 返回。
 export interface AppInfo {
   platform: NodeJS.Platform
   versions: Record<string, string | undefined>
   isDev: boolean
 }
 
-// 通过 contextBridge 暴露给渲染进程的 API 形状（window.api）。
+// WebDAV 连接配置。password 为明文，仅在表单与 IPC 层短暂存在。
+export interface Connection {
+  id: string
+  name: string
+  host: string
+  port: number
+  https: boolean
+  basePath: string
+  username: string
+  password: string
+}
+
+// 连接列表项（不含密码）。
+export type ConnectionInfo = Omit<Connection, 'password'>
+
+// 新建 / 更新连接的输入，id 为空表示新建。
+export type ConnectionDraft = Omit<Connection, 'id'> & { id?: string }
+
+export interface WebDavEntry {
+  name: string
+  path: string
+  type: 'file' | 'directory'
+  size: number
+  modified: string
+  mime: string
+}
+
+export interface WebDavListing {
+  path: string
+  parent: string | null
+  entries: WebDavEntry[]
+}
+
 export interface ElectronApi {
   ping: () => Promise<string>
   getInfo: () => Promise<AppInfo>
+  listConnections: () => Promise<ConnectionInfo[]>
+  getConnection: (id: string) => Promise<Connection | null>
+  saveConnection: (draft: ConnectionDraft) => Promise<ConnectionInfo>
+  removeConnection: (id: string) => Promise<void>
+  listDirectory: (connectionId: string, path: string) => Promise<WebDavListing>
 }

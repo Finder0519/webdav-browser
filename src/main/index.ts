@@ -1,14 +1,16 @@
 import { app, BrowserWindow, ipcMain, shell } from 'electron'
 import { join } from 'path'
-import type { AppInfo } from '../shared/types'
+import * as store from './connections'
+import { listDirectory } from './webdav'
+import type { AppInfo, ConnectionDraft } from '../shared/types'
 
 // 创建主窗口。
 function createWindow(): void {
   const mainWindow = new BrowserWindow({
-    width: 1100,
-    height: 720,
-    minWidth: 720,
-    minHeight: 480,
+    width: 1200,
+    height: 760,
+    minWidth: 860,
+    minHeight: 520,
     show: false,
     autoHideMenuBar: true,
     webPreferences: {
@@ -19,16 +21,13 @@ function createWindow(): void {
     }
   })
 
-  // 窗口准备好后再显示，避免白屏闪烁。
   mainWindow.on('ready-to-show', () => mainWindow.show())
 
-  // 拦截新窗口请求，交给系统默认浏览器打开外部链接。
   mainWindow.webContents.setWindowOpenHandler((details) => {
     shell.openExternal(details.url)
     return { action: 'deny' }
   })
 
-  // 开发模式加载 Vite 开发服务器地址，生产模式加载打包后的静态文件。
   if (process.env['ELECTRON_RENDERER_URL']) {
     mainWindow.loadURL(process.env['ELECTRON_RENDERER_URL'])
   } else {
@@ -36,20 +35,29 @@ function createWindow(): void {
   }
 }
 
-// 注册 IPC 处理器，供渲染进程调用。
+// 注册 IPC 处理器。凭据仅在主进程使用，不外泄到渲染进程的连接列表。
 function registerIpcHandlers(): void {
   ipcMain.handle('app:ping', () => 'pong')
 
-  ipcMain.handle('app:getInfo', (): AppInfo => {
-    return {
-      platform: process.platform,
-      versions: {
-        electron: process.versions.electron,
-        chrome: process.versions.chrome,
-        node: process.versions.node
-      },
-      isDev: Boolean(process.env['ELECTRON_RENDERER_URL'])
-    }
+  ipcMain.handle('app:getInfo', (): AppInfo => ({
+    platform: process.platform,
+    versions: {
+      electron: process.versions.electron,
+      chrome: process.versions.chrome,
+      node: process.versions.node
+    },
+    isDev: Boolean(process.env['ELECTRON_RENDERER_URL'])
+  }))
+
+  ipcMain.handle('connections:list', () => store.listConnections())
+  ipcMain.handle('connections:get', (_e, id: string) => store.getConnection(id))
+  ipcMain.handle('connections:save', (_e, draft: ConnectionDraft) => store.saveConnection(draft))
+  ipcMain.handle('connections:remove', (_e, id: string) => store.removeConnection(id))
+
+  ipcMain.handle('webdav:list', async (_e, connectionId: string, path: string) => {
+    const conn = store.getConnection(connectionId)
+    if (!conn) throw new Error('连接不存在')
+    return listDirectory(conn, path)
   })
 }
 
@@ -57,13 +65,11 @@ app.whenReady().then(() => {
   registerIpcHandlers()
   createWindow()
 
-  // macOS：点击 Dock 图标时，若无窗口则重新创建。
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) createWindow()
   })
 })
 
-// 除 macOS 外，关闭所有窗口时退出应用。
 app.on('window-all-closed', () => {
   if (process.platform !== 'darwin') app.quit()
 })
