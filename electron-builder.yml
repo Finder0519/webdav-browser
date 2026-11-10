@@ -1,0 +1,53 @@
+appId: cn.finder0519.webdavbrowser
+productName: WebDAV 浏览器
+copyright: Copyright © 2026 Finder0519
+
+directories:
+  output: release
+  buildResources: build
+
+files:
+  - out/**
+  - package.json
+
+asar: true
+
+# webdav-browser-0.1.0-mac-arm64.dmg
+artifactName: ${name}-${version}-${os}-${arch}.${ext}
+
+# 应用图标（源图 ~/Downloads/app-icon.png 派生，生成脚本见 scripts/icon-gen/）：
+#   icon.icns  macOS 用，方形（系统自动套圆角遮罩）
+#   icon.ico   Windows 用，7 尺寸，圆角
+#   icon.png   Linux 用，512x512，圆角
+
+mac:
+  icon: build/icon.icns
+  category: public.app-category.utilities
+  target:
+    - target: dmg
+      arch: [x64, arm64]
+    - target: zip
+      arch: [x64, arm64]
+  # 暂不签名：CI 未配置证书时 electron-builder 自动跳过签名
+
+win:
+  icon: build/icon.ico
+  target:
+    - target: nsis
+      arch: [x64]
+
+nsis:
+  installerIcon: build/icon.ico
+  uninstallerIcon: build/icon.ico
+  oneClick: false
+  perMachine: false
+  allowToChangeInstallationDirectory: true
+  deleteAppDataOnUninstall: false
+  artifactName: ${name}-${version}-win-${arch}-setup.${ext}
+
+linux:
+  icon: build/icon.png
+  target:
+    - target: AppImage
+      arch: [x64]
+  category: Utility
