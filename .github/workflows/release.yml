@@ -10,7 +10,49 @@ permissions:
   contents: write
 
 jobs:
+  # 每次 main 推送或手动触发打包时，自动将版本号（patch）+0.0.1 并回写 package.json 推回仓库。
+  # 推送使用 GITHUB_TOKEN 且提交信息带 [skip ci]，GitHub 不会因此再次触发本工作流。
+  bump-version:
+    runs-on: ubuntu-latest
+    if: github.event_name == 'workflow_dispatch' || (github.event_name == 'push' && github.ref_type == 'branch')
+    outputs:
+      new_version: ${{ steps.bump.outputs.new_version }}
+      commit_sha: ${{ steps.commit.outputs.commit_sha }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Bump patch version (+0.0.1)
+        id: bump
+        shell: bash
+        run: |
+          node -e '
+            const fs = require("fs");
+            const p = "package.json";
+            const m = JSON.parse(fs.readFileSync(p, "utf8"));
+            const [a, b, c] = m.version.split(".").map(Number);
+            m.version = `${a}.${b}.${c + 1}`;
+            fs.writeFileSync(p, JSON.stringify(m, null, 2) + "\n");
+          '
+          new_version=$(node -p "require('./package.json').version")
+          echo "new_version=$new_version" >> "$GITHUB_OUTPUT"
+          echo "Bumped version to $new_version"
+
+      - name: Commit and push version bump
+        id: commit
+        shell: bash
+        run: |
+          new_version="${{ steps.bump.outputs.new_version }}"
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add package.json
+          git commit -m "chore: bump version to v${new_version} [skip ci]"
+          git remote set-url origin "https://x-access-token:${{ github.token }}@github.com/${{ github.repository }}.git"
+          git push origin HEAD:main
+          echo "commit_sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+
   build:
+    needs: bump-version
     strategy:
       fail-fast: false
       matrix:
@@ -35,8 +77,17 @@ jobs:
       - name: Type check
         run: npm run typecheck
 
+      # 用 bump-version 产出的新版本号覆盖打包元数据，保证三平台产物版本一致；
+      # 推送 v* 标签（不触发 bump）时沿用标签自身版本。
       - name: Build & package
-        run: npm run dist
+        shell: bash
+        run: |
+          extra=""
+          new_version="${{ needs.bump-version.outputs.new_version }}"
+          if [ -n "$new_version" ]; then
+            extra="--c.extraMetadata.version=$new_version"
+          fi
+          npm run dist -- $extra
 
       # 产物上传为 Actions Artifact（手动触发供下载；push 时供发布任务合并）
       - name: Upload artifact
@@ -49,14 +100,17 @@ jobs:
             release/*.AppImage
           if-no-files-found: error
 
-  # push（main 或 v* 标签）时合并三平台产物，一次性发布 GitHub Release
+  # push（main 或 v* 标签）及手动触发时合并三平台产物，一次性发布 GitHub Release
   publish:
-    needs: build
-    if: github.event_name == 'push'
+    needs: [build, bump-version]
+    if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
     steps:
+      # 标签 push 检出标签本身；main/手动触发检出 bump 后的提交，使 Release 指向版本号已更新的提交
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.bump-version.outputs.commit_sha || github.ref }}
 
       - name: Download artifacts
         uses: actions/download-artifact@v4
@@ -67,16 +121,16 @@ jobs:
 
       # 确定 Release 标签:
       #   推送 v* 标签 -> 直接用该标签（正式版）
-      #   推送 main    -> v<版本>-build.<构建号>，按 package.json 版本自动建 Release
+      #   推送 main / 手动触发 -> v<版本>，版本为每个触发自动 +0.0.1 递增后的 package.json 版本
       - name: Release metadata
         id: meta
         shell: bash
         run: |
-          version=$(node -p "require('./package.json').version")
           if [ "$GITHUB_REF_TYPE" = "tag" ]; then
             tag="$GITHUB_REF_NAME"
           else
-            tag="v$version-build.$GITHUB_RUN_NUMBER"
+            version=$(node -p "require('./package.json').version")
+            tag="v$version"
           fi
           echo "tag=$tag" >> "$GITHUB_OUTPUT"
 
