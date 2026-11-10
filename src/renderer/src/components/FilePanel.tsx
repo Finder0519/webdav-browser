@@ -8,7 +8,7 @@ interface Props {
   listing: WebDavListing | null
   loading: boolean
   error: string | null
-  selectedPath: string | null
+  selectedEntry: WebDavEntry | null
   onNavigate: (path: string) => void
   onRefresh: () => void
   onSelect: (entry: WebDavEntry | null) => void
@@ -57,13 +57,17 @@ function entryIcon(entry: WebDavEntry): string {
 }
 
 export default function FilePanel({
-  rootPath, path, listing, loading, error, selectedPath,
+  rootPath, path, listing, loading, error, selectedEntry,
   onNavigate, onRefresh, onSelect, onOpen,
   onCreateFolder, onCreateFile, onUpload, onDelete, onRename, onDownload
 }: Props) {
   const atRoot = normalizePath(path) === normalizePath(rootPath)
   const crumbs = breadcrumb(rootPath, path)
-  const hasSelection = Boolean(selectedPath)
+  const hasSelection = Boolean(selectedEntry)
+  // 文件夹或文本/图片/音频/视频可「打开」，其余类型置灰。
+  const canOpen = Boolean(
+    selectedEntry && (selectedEntry.type === 'directory' || fileKind(selectedEntry.name) !== 'other')
+  )
 
   return (
     <section className="file-panel">
@@ -105,6 +109,14 @@ export default function FilePanel({
         <button className="btn" onClick={onCreateFile}>新建文本文件</button>
         <button className="btn" onClick={onUpload}>上传</button>
         <span className="toolbar-sep" />
+        <button
+          className="btn"
+          onClick={() => selectedEntry && onOpen(selectedEntry)}
+          disabled={!canOpen}
+          title={canOpen ? '打开所选项' : '仅文件夹或文本/图片/音频/视频可打开'}
+        >
+          打开
+        </button>
         <button className="btn" onClick={onRename} disabled={!hasSelection}>重命名</button>
         <button className="btn" onClick={onDownload} disabled={!hasSelection}>下载</button>
         <button className="btn btn-danger" onClick={onDelete} disabled={!hasSelection}>删除</button>
@@ -130,7 +142,7 @@ export default function FilePanel({
                 <tr
                   key={entry.path}
                   className={`${entry.type === 'directory' ? 'row-dir' : 'row-file'}${
-                    entry.path === selectedPath ? ' selected' : ''
+                    entry.path === selectedEntry?.path ? ' selected' : ''
                   }`}
                   onClick={() => onSelect(entry)}
                   onDoubleClick={() => onOpen(entry)}

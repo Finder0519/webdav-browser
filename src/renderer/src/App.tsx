@@ -263,7 +263,7 @@ export default function App() {
         listing={listing}
         loading={loading}
         error={error}
-        selectedPath={selectedEntry?.path ?? null}
+        selectedEntry={selectedEntry}
         onNavigate={navigate}
         onRefresh={refresh}
         onSelect={setSelectedEntry}

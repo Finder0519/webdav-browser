@@ -14,6 +14,9 @@ protocol.registerSchemesAsPrivileged([
   }
 ])
 
+// 允许音视频自动播放（无需用户手势），供预览打开即播。
+app.commandLine.appendSwitch('autoplay-policy', 'no-user-gesture-required')
+
 function requireConn(connectionId: string): Connection {
   const conn = store.getConnection(connectionId)
   if (!conn) throw new Error('连接不存在')

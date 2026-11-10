@@ -17,8 +17,8 @@ export default function PreviewModal({ fileName, kind, url, onClose }: Props) {
         </div>
         <div className="preview-body">
           {kind === 'image' && <img className="preview-img" src={url} alt={fileName} />}
-          {kind === 'audio' && <audio className="preview-audio" src={url} controls />}
-          {kind === 'video' && <video className="preview-video" src={url} controls />}
+          {kind === 'audio' && <audio className="preview-audio" src={url} controls autoPlay />}
+          {kind === 'video' && <video className="preview-video" src={url} controls autoPlay />}
         </div>
       </div>
     </div>
