@@ -681,11 +681,23 @@ body {
 
 /* ---------- 媒体预览 ---------- */
 .preview-dialog {
-  width: min(92vw, 1720px);
-  height: min(88vh, 1220px);
+  width: min(98vw, 1960px);
+  height: min(97vh, 1460px);
   display: flex;
   flex-direction: column;
   overflow: hidden;
+}
+
+.preview-body {
+  flex: 1;
+  min-height: 0;
+  margin-top: 16px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--bg);
+  border-radius: 10px;
+  padding: 24px;
 }
 
 .modal-head {
@@ -702,42 +714,13 @@ body {
   white-space: nowrap;
 }
 
-.preview-body {
-  flex: 1;
-  min-height: 0;
-  margin-top: 16px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  background: var(--bg);
-  border-radius: 10px;
-  padding: 12px;
-}
+
 
 .preview-img {
   max-width: 100%;
   max-height: 100%;
   object-fit: contain;
   border-radius: 8px;
-}
-
-.preview-external {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 12px;
-  max-width: 100%;
-  max-height: 100%;
-}
-
-.preview-external video,
-.preview-external audio {
-  max-width: 100%;
-  max-height: calc(100vh - 200px);
-}
-
-.preview-play-btn {
-  flex-shrink: 0;
 }
 
 .preview-audio {

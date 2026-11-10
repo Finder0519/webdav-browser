@@ -469,15 +469,8 @@ export default function App() {
         />
       )}
 
-      {preview && selectedId && (
-        <PreviewModal
-          fileName={preview.entry.name}
-          kind={preview.kind}
-          url={preview.url}
-          connectionId={selectedId}
-          path={preview.entry.path}
-          onClose={() => setPreview(null)}
-        />
+      {preview && (
+        <PreviewModal fileName={preview.entry.name} kind={preview.kind} url={preview.url} onClose={() => setPreview(null)} />
       )}
 
       {playerSettingsOpen && <SettingsDialog onClose={() => setPlayerSettingsOpen(false)} />}
