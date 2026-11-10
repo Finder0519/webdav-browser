@@ -7,8 +7,8 @@ interface Props {
 
 export default function PreviewModal({ fileName, kind, url, onClose }: Props) {
   return (
-    <div className="dialog-mask" onMouseDown={onClose}>
-      <div className="dialog dialog-lg preview-dialog" onMouseDown={(e) => e.stopPropagation()}>
+    <div className="dialog-mask">
+      <div className="dialog dialog-lg preview-dialog">
         <div className="preview-head">
           <h3>{fileName}</h3>
           <button className="icon-btn" title="关闭" onClick={onClose}>
