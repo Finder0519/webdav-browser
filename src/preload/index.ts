@@ -1,5 +1,6 @@
 import { contextBridge, ipcRenderer } from 'electron'
-import type { ConnectionDraft, ElectronApi } from '../shared/types'
+import type { IpcRendererEvent } from 'electron'
+import type { ConnectionDraft, DownloadInterrupted, DownloadProgress, ElectronApi } from '../shared/types'
 
 // 通过 contextBridge 安全地把受控 API 暴露给渲染进程。
 const api: ElectronApi = {
@@ -20,8 +21,23 @@ const api: ElectronApi = {
   uploadFiles: (connectionId, parentPath) => ipcRenderer.invoke('files:upload', connectionId, parentPath),
   deleteEntry: (connectionId, path) => ipcRenderer.invoke('files:delete', connectionId, path),
   renameEntry: (connectionId, path, newName) => ipcRenderer.invoke('files:rename', connectionId, path, newName),
-  downloadFile: (connectionId, path, suggestedName) =>
-    ipcRenderer.invoke('files:download', connectionId, path, suggestedName),
+  downloadFile: (id, connectionId, path, suggestedName, totalSize) =>
+    ipcRenderer.invoke('files:download', id, connectionId, path, suggestedName, totalSize),
+  onDownloadProgress: (callback) => {
+    const listener = (_event: IpcRendererEvent, progress: DownloadProgress) => callback(progress)
+    ipcRenderer.on('files:download:progress', listener)
+    return () => {
+      ipcRenderer.removeListener('files:download:progress', listener)
+    }
+  },
+  onDownloadInterrupted: (callback) => {
+    const listener = (_event: IpcRendererEvent, info: DownloadInterrupted) => callback(info)
+    ipcRenderer.on('files:download:interrupted', listener)
+    return () => {
+      ipcRenderer.removeListener('files:download:interrupted', listener)
+    }
+  },
+  controlDownload: (id, action) => ipcRenderer.invoke('files:download:control', id, action),
 
   readTextFile: (connectionId, path) => ipcRenderer.invoke('text:read', connectionId, path),
   writeTextFile: (connectionId, path, content) => ipcRenderer.invoke('text:write', connectionId, path, content)

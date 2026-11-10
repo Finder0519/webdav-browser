@@ -23,6 +23,9 @@ function requireConn(connectionId: string): Connection {
   return conn
 }
 
+// 活动下载任务表：id 由渲染进程生成，供进度/控制事件与任务对应。
+const activeDownloads = new Map<string, { handle: webdav.DownloadHandle; localPath: string }>()
+
 function createWindow(): void {
   const mainWindow = new BrowserWindow({
     width: 1200,
@@ -94,11 +97,62 @@ function registerIpcHandlers(): void {
   ipcMain.handle('files:rename', (_e, connectionId: string, path: string, newName: string) =>
     webdav.renameEntry(requireConn(connectionId), path, newName)
   )
-  ipcMain.handle('files:download', async (_e, connectionId: string, path: string, suggestedName: string) => {
-    const result = await dialog.showSaveDialog({ title: '保存文件', defaultPath: suggestedName })
-    if (result.canceled || !result.filePath) return null
-    await webdav.downloadFile(requireConn(connectionId), path, result.filePath)
-    return result.filePath
+  ipcMain.handle(
+    'files:download',
+    async (e, id: string, connectionId: string, path: string, suggestedName: string, totalSize: number) => {
+      if (!id || activeDownloads.has(id)) throw new Error('下载任务标识无效或重复')
+      const result = await dialog.showSaveDialog({ title: '保存文件', defaultPath: suggestedName })
+      if (result.canceled || !result.filePath) return { status: 'dismissed' }
+      // 同一本地文件同时只允许一个下载任务，避免写入互相覆盖。
+      for (const task of activeDownloads.values()) {
+        if (task.localPath === result.filePath) throw new Error('该文件已有下载任务进行中')
+      }
+      let received = 0
+      let lastSent = 0
+      let lastSentBytes = -1
+      const sendProgress = (bytes: number) => {
+        if (e.sender.isDestroyed() || bytes === lastSentBytes) return
+        lastSentBytes = bytes
+        e.sender.send('files:download:progress', { id, name: suggestedName, received: bytes, total: totalSize })
+      }
+      const handle = await webdav.startDownload(
+        requireConn(connectionId),
+        path,
+        result.filePath,
+        (bytes) => {
+          received = bytes
+          // 节流：最多每 150ms 推送一次，结束时再补发最终值。
+          const now = Date.now()
+          if (now - lastSent < 150) return
+          lastSent = now
+          sendProgress(bytes)
+        },
+        (message) => {
+          // 网络中断但已有进度：通知渲染进程展示「已中断」，可继续或取消。
+          if (!e.sender.isDestroyed()) {
+            e.sender.send('files:download:interrupted', { id, name: suggestedName, message })
+          }
+        }
+      )
+      activeDownloads.set(id, { handle, localPath: result.filePath })
+      try {
+        const outcome = await handle.done
+        if (outcome === 'cancelled') return { status: 'cancelled' }
+        sendProgress(received)
+        return { status: 'saved', path: result.filePath }
+      } finally {
+        activeDownloads.delete(id)
+      }
+    }
+  )
+
+  ipcMain.handle('files:download:control', (_e, id: string, action: 'pause' | 'resume' | 'cancel') => {
+    const task = activeDownloads.get(id)
+    if (!task) return false
+    if (action === 'pause') task.handle.pause()
+    else if (action === 'resume') task.handle.resume()
+    else task.handle.cancel()
+    return true
   })
 
   ipcMain.handle('text:read', (_e, connectionId: string, path: string) =>

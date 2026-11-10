@@ -39,6 +39,30 @@ export interface WebDavListing {
   entries: WebDavEntry[]
 }
 
+// 下载进度（received/total 为字节数，total 为 0 表示大小未知）。
+export interface DownloadProgress {
+  id: string
+  name: string
+  received: number
+  total: number
+}
+
+// 下载中断信息（网络错误后已有进度，可断点续传）。
+export interface DownloadInterrupted {
+  id: string
+  name: string
+  message: string
+}
+
+// 单个下载任务的最终结果。
+export type DownloadResult =
+  | { status: 'saved'; path: string }
+  | { status: 'cancelled' }
+  | { status: 'dismissed' }
+
+// 下载控制动作。
+export type DownloadControlAction = 'pause' | 'resume' | 'cancel'
+
 export interface ElectronApi {
   ping: () => Promise<string>
   getInfo: () => Promise<AppInfo>
@@ -53,7 +77,20 @@ export interface ElectronApi {
   uploadFiles: (connectionId: string, parentPath: string) => Promise<number>
   deleteEntry: (connectionId: string, path: string) => Promise<void>
   renameEntry: (connectionId: string, path: string, newName: string) => Promise<void>
-  downloadFile: (connectionId: string, path: string, suggestedName: string) => Promise<string | null>
+  // 发起下载，id 为渲染进程生成的任务标识（用于进度/控制事件对应）。
+  downloadFile: (
+    id: string,
+    connectionId: string,
+    path: string,
+    suggestedName: string,
+    totalSize: number
+  ) => Promise<DownloadResult>
+  // 订阅下载进度，返回取消订阅函数。
+  onDownloadProgress: (callback: (progress: DownloadProgress) => void) => () => void
+  // 订阅下载中断通知，返回取消订阅函数。
+  onDownloadInterrupted: (callback: (info: DownloadInterrupted) => void) => () => void
+  // 控制指定下载任务，返回该任务是否存在。
+  controlDownload: (id: string, action: DownloadControlAction) => Promise<boolean>
   // 文本读写
   readTextFile: (connectionId: string, path: string) => Promise<string>
   writeTextFile: (connectionId: string, path: string, content: string) => Promise<void>

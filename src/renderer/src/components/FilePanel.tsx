@@ -1,6 +1,6 @@
 import { breadcrumb, normalizePath, parentPath } from '@shared/normalize'
 import { fileKind } from '@shared/filekind'
-import type { WebDavEntry, WebDavListing } from '@shared/types'
+import type { DownloadControlAction, WebDavEntry, WebDavListing } from '@shared/types'
 
 interface Props {
   rootPath: string
@@ -9,6 +9,9 @@ interface Props {
   loading: boolean
   error: string | null
   selectedEntry: WebDavEntry | null
+  downloadTasks: DownloadTask[]
+  onDownloadControl: (id: string, action: DownloadControlAction) => void
+  onDismissDownload: (id: string) => void
   onNavigate: (path: string) => void
   onRefresh: () => void
   onSelect: (entry: WebDavEntry | null) => void
@@ -21,7 +24,18 @@ interface Props {
   onDownload: () => void
 }
 
-function formatSize(bytes: number, type: string): string {
+// 下载任务展示状态（speed 为字节/秒，经平滑处理）。
+export interface DownloadTask {
+  id: string
+  name: string
+  received: number
+  total: number
+  speed: number
+  state: 'starting' | 'downloading' | 'paused' | 'interrupted' | 'done' | 'failed' | 'cancelled'
+  message?: string
+}
+
+function formatSize(bytes: number, type = 'file'): string {
   if (type === 'directory') return '—'
   if (!bytes || bytes <= 0) return '0 B'
   const units = ['B', 'KB', 'MB', 'GB', 'TB']
@@ -58,6 +72,7 @@ function entryIcon(entry: WebDavEntry): string {
 
 export default function FilePanel({
   rootPath, path, listing, loading, error, selectedEntry,
+  downloadTasks, onDownloadControl, onDismissDownload,
   onNavigate, onRefresh, onSelect, onOpen,
   onCreateFolder, onCreateFile, onUpload, onDelete, onRename, onDownload
 }: Props) {
@@ -118,9 +133,81 @@ export default function FilePanel({
           打开
         </button>
         <button className="btn" onClick={onRename} disabled={!hasSelection}>重命名</button>
-        <button className="btn" onClick={onDownload} disabled={!hasSelection}>下载</button>
+        <button className="btn" onClick={onDownload} disabled={!hasSelection} title="下载所选文件（可多任务并行）">
+          下载
+        </button>
         <button className="btn btn-danger" onClick={onDelete} disabled={!hasSelection}>删除</button>
       </div>
+
+      {downloadTasks.length > 0 && (
+        <div className="download-panel">
+          {downloadTasks.map((task) => {
+            const percent = task.total > 0 ? Math.min(100, Math.floor((task.received / task.total) * 100)) : 0
+            const active = task.state === 'downloading' || task.state === 'paused' || task.state === 'interrupted'
+            let meta = task.message ?? ''
+            let metaTitle: string | undefined = task.message
+            if (task.state === 'starting') {
+              meta = '请选择保存位置…'
+              metaTitle = undefined
+            } else if (active) {
+              const prefix = task.state === 'paused' ? '已暂停 · ' : task.state === 'interrupted' ? '已中断 · ' : ''
+              const bytes =
+                task.total > 0
+                  ? `${formatSize(task.received)} / ${formatSize(task.total)}（${percent}%）`
+                  : `已下载 ${formatSize(task.received)}（总大小未知）`
+              const speed = task.speed > 0 ? ` · ${formatSize(task.speed)}/s` : ''
+              meta = prefix + bytes + speed
+            }
+            return (
+              <div key={task.id} className="download-row">
+                <span className="download-name" title={task.name}>
+                  ⤓ {task.name}
+                </span>
+                {active && task.total > 0 && (
+                  <div className="progress-track">
+                    <div
+                      className={`progress-fill${task.state !== 'downloading' ? ' paused' : ''}`}
+                      style={{ width: `${percent}%` }}
+                    />
+                  </div>
+                )}
+                <span className={`download-meta${task.state === 'failed' ? ' error' : ''}`} title={metaTitle}>
+                  {meta}
+                </span>
+                {active && (
+                  <>
+                    <button
+                      className="btn btn-sm"
+                      title={
+                        task.state === 'downloading'
+                          ? '暂停下载'
+                          : task.state === 'interrupted'
+                            ? `继续下载（${task.message ?? ''}）`
+                            : '继续下载'
+                      }
+                      onClick={() => onDownloadControl(task.id, task.state === 'downloading' ? 'pause' : 'resume')}
+                    >
+                      {task.state === 'downloading' ? '⏸ 暂停' : '▶ 继续'}
+                    </button>
+                    <button
+                      className="btn btn-sm btn-danger"
+                      title="取消下载并删除临时文件"
+                      onClick={() => onDownloadControl(task.id, 'cancel')}
+                    >
+                      ✕ 取消
+                    </button>
+                  </>
+                )}
+                {!active && task.state !== 'starting' && (
+                  <button className="btn btn-sm" title="清除该记录" onClick={() => onDismissDownload(task.id)}>
+                    ✕
+                  </button>
+                )}
+              </div>
+            )
+          })}
+        </div>
+      )}
 
       <div className="file-body">
         {loading && <div className="state">加载中…</div>}

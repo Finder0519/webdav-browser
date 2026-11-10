@@ -435,6 +435,73 @@ body {
   color: var(--primary-fg);
 }
 
+/* ---------- 下载任务面板 ---------- */
+.download-panel {
+  display: flex;
+  flex-direction: column;
+  border-bottom: 1px solid var(--border);
+  background: var(--card);
+  max-height: 180px;
+  overflow-y: auto;
+}
+
+.download-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 16px;
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.download-row + .download-row {
+  border-top: 1px solid var(--border);
+}
+
+.download-name {
+  max-width: 220px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--fg);
+}
+
+.progress-track {
+  flex: 1;
+  height: 6px;
+  border-radius: 3px;
+  background: var(--hover);
+  overflow: hidden;
+}
+
+.progress-fill {
+  height: 100%;
+  border-radius: 3px;
+  background: var(--primary);
+  transition: width 0.15s linear;
+}
+
+.progress-fill.paused {
+  background: var(--muted);
+}
+
+.download-meta {
+  flex: 1;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.download-meta.error {
+  color: var(--danger);
+}
+
+.download-row .btn-sm {
+  padding: 3px 10px;
+  font-size: 12px;
+  white-space: nowrap;
+}
+
 /* ---------- 列表选中 ---------- */
 .file-table tbody tr.selected {
   background: var(--selected);

@@ -1,9 +1,17 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { normalizePath } from '@shared/normalize'
 import { fileKind, mediaUrl } from '@shared/filekind'
-import type { Connection, ConnectionDraft, ConnectionInfo, WebDavEntry, WebDavListing } from '@shared/types'
+import type {
+  Connection,
+  ConnectionDraft,
+  ConnectionInfo,
+  DownloadControlAction,
+  DownloadInterrupted,
+  WebDavEntry,
+  WebDavListing
+} from '@shared/types'
 import Sidebar from './components/Sidebar'
-import FilePanel from './components/FilePanel'
+import FilePanel, { type DownloadTask } from './components/FilePanel'
 import ConnectionDialog from './components/ConnectionDialog'
 import PromptDialog from './components/PromptDialog'
 import EditorModal from './components/EditorModal'
@@ -19,6 +27,13 @@ interface PromptConfig {
 
 function errMsg(e: unknown): string {
   return e instanceof Error ? e.message : String(e)
+}
+
+// 下载任务标识：用于进度/控制事件与任务行对应。
+function newTaskId(): string {
+  return typeof crypto.randomUUID === 'function'
+    ? crypto.randomUUID()
+    : `dl-${Date.now()}-${Math.random().toString(36).slice(2)}`
 }
 
 export default function App() {
@@ -39,6 +54,10 @@ export default function App() {
   const [preview, setPreview] = useState<{ entry: WebDavEntry; kind: 'image' | 'audio' | 'video'; url: string } | null>(
     null
   )
+
+  // 下载任务列表：多任务并行，id 由渲染进程生成供事件对应。
+  const [downloadTasks, setDownloadTasks] = useState<DownloadTask[]>([])
+  const speedMapRef = useRef(new Map<string, { lastTime: number; lastBytes: number; speed: number }>())
 
   const load = useCallback(async (id: string, path: string) => {
     setLoading(true)
@@ -79,6 +98,51 @@ export default function App() {
       if (list.length > 0) openConnection(list[0])
     })
   }, [openConnection])
+
+  // 订阅下载进度，速度用指数滑动平均平滑瞬时抖动。
+  useEffect(() => {
+    return window.api.onDownloadProgress((p) => {
+      let s = speedMapRef.current.get(p.id)
+      if (!s) {
+        s = { lastTime: 0, lastBytes: 0, speed: 0 }
+        speedMapRef.current.set(p.id, s)
+      }
+      const now = Date.now()
+      if (s.lastTime > 0 && now > s.lastTime) {
+        const instant = ((p.received - s.lastBytes) * 1000) / (now - s.lastTime)
+        s.speed = s.speed > 0 ? s.speed * 0.7 + instant * 0.3 : instant
+      }
+      s.lastTime = now
+      s.lastBytes = p.received
+      const speed = s.speed
+      setDownloadTasks((prev) =>
+        prev.map((t) =>
+          t.id === p.id
+            ? {
+                ...t,
+                name: p.name,
+                received: p.received,
+                total: p.total,
+                speed,
+                // 仅在等待/传输中时由进度推进状态，暂停/中断/结束状态不被在途回调覆盖。
+                state: t.state === 'starting' ? 'downloading' : t.state
+              }
+            : t
+        )
+      )
+    })
+  }, [])
+
+  // 下载中断（网络错误但已有进度）：保留进度展示，等待继续或取消。
+  useEffect(
+    () =>
+      window.api.onDownloadInterrupted((info) =>
+        setDownloadTasks((prev) =>
+          prev.map((t) => (t.id === info.id ? { ...t, state: 'interrupted', message: info.message } : t))
+        )
+      ),
+    []
+  )
 
   function refresh() {
     if (selectedId) load(selectedId, currentPath)
@@ -188,14 +252,48 @@ export default function App() {
     }
   }
 
-  async function downloadEntry() {
+  function patchDownloadTask(id: string, patch: Partial<DownloadTask>) {
+    setDownloadTasks((prev) => prev.map((t) => (t.id === id ? { ...t, ...patch } : t)))
+  }
+
+  function downloadEntry() {
     if (!selectedId || !selectedEntry) return
-    try {
-      const saved = await window.api.downloadFile(selectedId, selectedEntry.path, selectedEntry.name)
-      if (saved) window.alert('已保存到：' + saved)
-    } catch (e) {
-      window.alert('下载失败：' + errMsg(e))
+    const entry = selectedEntry
+    const id = newTaskId()
+    setDownloadTasks((prev) => [...prev, { id, name: entry.name, received: 0, total: entry.size, speed: 0, state: 'starting' }])
+    void (async () => {
+      try {
+        const result = await window.api.downloadFile(id, selectedId, entry.path, entry.name, entry.size)
+        if (result.status === 'saved') {
+          patchDownloadTask(id, { state: 'done', message: '已保存到：' + result.path })
+        } else if (result.status === 'cancelled') {
+          patchDownloadTask(id, { state: 'cancelled', message: '下载已取消' })
+        } else {
+          // 未选择保存位置：任务未开始，移除任务行。
+          setDownloadTasks((prev) => prev.filter((t) => t.id !== id))
+        }
+      } catch (e) {
+        patchDownloadTask(id, { state: 'failed', message: '下载失败：' + errMsg(e) })
+      } finally {
+        speedMapRef.current.delete(id)
+      }
+    })()
+  }
+
+  function controlDownload(id: string, action: DownloadControlAction) {
+    // 暂停/继续后重新计速，避免瞬时速度被暂停时段拉平。
+    const speed = speedMapRef.current.get(id)
+    if (speed) {
+      speed.lastTime = 0
+      speed.speed = 0
     }
+    if (action === 'pause') patchDownloadTask(id, { state: 'paused' })
+    else if (action === 'resume') patchDownloadTask(id, { state: 'downloading', message: undefined })
+    void window.api.controlDownload(id, action)
+  }
+
+  function dismissDownload(id: string) {
+    setDownloadTasks((prev) => prev.filter((t) => t.id !== id))
   }
 
   function closeEditor() {
@@ -282,6 +380,9 @@ export default function App() {
         onDelete={deleteEntry}
         onRename={renameEntry}
         onDownload={downloadEntry}
+        downloadTasks={downloadTasks}
+        onDownloadControl={controlDownload}
+        onDismissDownload={dismissDownload}
       />
 
       {dialogOpen && (
