@@ -10,7 +10,7 @@ interface Props {
 export default function EditorModal({ fileName, content, saving, onChange, onSave, onClose }: Props) {
   return (
     <div className="dialog-mask">
-      <div className="dialog dialog-lg">
+      <div className="dialog dialog-lg editor-dialog">
         <div className="modal-head">
           <h3>编辑：{fileName}</h3>
           <button className="icon-btn" title="关闭" onClick={onClose} disabled={saving}>
