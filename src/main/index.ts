@@ -97,6 +97,12 @@ function registerIpcHandlers(): void {
   ipcMain.handle('files:rename', (_e, connectionId: string, path: string, newName: string) =>
     webdav.renameEntry(requireConn(connectionId), path, newName)
   )
+  ipcMain.handle('files:copy', (_e, connectionId: string, path: string, destDir: string) =>
+    webdav.copyEntry(requireConn(connectionId), path, destDir)
+  )
+  ipcMain.handle('files:move', (_e, connectionId: string, path: string, destDir: string) =>
+    webdav.moveEntry(requireConn(connectionId), path, destDir)
+  )
   ipcMain.handle(
     'files:download',
     async (e, id: string, connectionId: string, path: string, suggestedName: string, totalSize: number) => {

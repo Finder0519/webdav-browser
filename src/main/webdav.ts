@@ -72,6 +72,23 @@ export async function renameEntry(conn: Connection, path: string, newName: strin
   await client.moveFile(path, joinPath(parent, newName), { overwrite: false })
 }
 
+// 复制到目标目录：目标目录与源目录一致时，目标名加 copy_ 前缀。
+export async function copyEntry(conn: Connection, path: string, destDir: string): Promise<void> {
+  const dest = normalizePath(destDir)
+  const sameDir = dest === normalizePath(parentPath(path) ?? '/')
+  const destName = sameDir ? `copy_${basename(path)}` : basename(path)
+  const client = await makeClient(conn)
+  await client.copyFile(path, joinPath(dest, destName), { overwrite: false })
+}
+
+// 移动到目标目录：目标目录与源目录一致时不做任何操作。
+export async function moveEntry(conn: Connection, path: string, destDir: string): Promise<void> {
+  const dest = normalizePath(destDir)
+  if (dest === normalizePath(parentPath(path) ?? '/')) return
+  const client = await makeClient(conn)
+  await client.moveFile(path, joinPath(dest, basename(path)), { overwrite: false })
+}
+
 // 下载句柄。done 仅在「完成」或「用户取消」时落定；
 // 网络中断（已有部分进度）不落定，而是经 onInterrupted 通知，由 resume 断点续传或 cancel 放弃。
 export interface DownloadHandle {

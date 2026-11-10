@@ -12,6 +12,7 @@ import type {
 } from '@shared/types'
 import Sidebar from './components/Sidebar'
 import FilePanel, { type DownloadTask } from './components/FilePanel'
+import DirPickerDialog from './components/DirPickerDialog'
 import ConnectionDialog from './components/ConnectionDialog'
 import PromptDialog from './components/PromptDialog'
 import EditorModal from './components/EditorModal'
@@ -51,6 +52,7 @@ export default function App() {
   const [editor, setEditor] = useState<{ entry: WebDavEntry; content: string; original: string; saving: boolean } | null>(
     null
   )
+  const [dirPick, setDirPick] = useState<{ entry: WebDavEntry; mode: 'copy' | 'move' } | null>(null)
   const [preview, setPreview] = useState<{ entry: WebDavEntry; kind: 'image' | 'audio' | 'video'; url: string } | null>(
     null
   )
@@ -241,6 +243,29 @@ export default function App() {
     })
   }
 
+  function copyEntry() {
+    if (!selectedId || !selectedEntry) return
+    setDirPick({ entry: selectedEntry, mode: 'copy' })
+  }
+
+  function moveEntry() {
+    if (!selectedId || !selectedEntry) return
+    setDirPick({ entry: selectedEntry, mode: 'move' })
+  }
+
+  async function handleDirPickConfirm(destDir: string) {
+    if (!dirPick || !selectedId) return
+    const { entry, mode } = dirPick
+    setDirPick(null)
+    try {
+      if (mode === 'copy') await window.api.copyEntry(selectedId, entry.path, destDir)
+      else await window.api.moveEntry(selectedId, entry.path, destDir)
+      refresh()
+    } catch (e) {
+      window.alert((mode === 'copy' ? '复制失败：' : '移动失败：') + errMsg(e))
+    }
+  }
+
   async function deleteEntry() {
     if (!selectedId || !selectedEntry) return
     if (!window.confirm(`确认删除「${selectedEntry.name}」？`)) return
@@ -379,6 +404,8 @@ export default function App() {
         onUpload={upload}
         onDelete={deleteEntry}
         onRename={renameEntry}
+        onCopy={copyEntry}
+        onMove={moveEntry}
         onDownload={downloadEntry}
         downloadTasks={downloadTasks}
         onDownloadControl={controlDownload}
@@ -420,6 +447,19 @@ export default function App() {
 
       {preview && (
         <PreviewModal fileName={preview.entry.name} kind={preview.kind} url={preview.url} onClose={() => setPreview(null)} />
+      )}
+
+      {dirPick && selectedId && (
+        <DirPickerDialog
+          mode={dirPick.mode}
+          entryPath={dirPick.entry.path}
+          entryName={dirPick.entry.name}
+          connectionId={selectedId}
+          rootPath={rootPath}
+          initialPath={currentPath}
+          onConfirm={handleDirPickConfirm}
+          onCancel={() => setDirPick(null)}
+        />
       )}
     </div>
   )

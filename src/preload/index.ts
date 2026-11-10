@@ -21,6 +21,8 @@ const api: ElectronApi = {
   uploadFiles: (connectionId, parentPath) => ipcRenderer.invoke('files:upload', connectionId, parentPath),
   deleteEntry: (connectionId, path) => ipcRenderer.invoke('files:delete', connectionId, path),
   renameEntry: (connectionId, path, newName) => ipcRenderer.invoke('files:rename', connectionId, path, newName),
+  copyEntry: (connectionId, path, destDir) => ipcRenderer.invoke('files:copy', connectionId, path, destDir),
+  moveEntry: (connectionId, path, destDir) => ipcRenderer.invoke('files:move', connectionId, path, destDir),
   downloadFile: (id, connectionId, path, suggestedName, totalSize) =>
     ipcRenderer.invoke('files:download', id, connectionId, path, suggestedName, totalSize),
   onDownloadProgress: (callback) => {

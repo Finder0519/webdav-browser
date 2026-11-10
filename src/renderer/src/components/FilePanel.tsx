@@ -21,6 +21,8 @@ interface Props {
   onUpload: () => void
   onDelete: () => void
   onRename: () => void
+  onCopy: () => void
+  onMove: () => void
   onDownload: () => void
 }
 
@@ -74,7 +76,7 @@ export default function FilePanel({
   rootPath, path, listing, loading, error, selectedEntry,
   downloadTasks, onDownloadControl, onDismissDownload,
   onNavigate, onRefresh, onSelect, onOpen,
-  onCreateFolder, onCreateFile, onUpload, onDelete, onRename, onDownload
+  onCreateFolder, onCreateFile, onUpload, onDelete, onRename, onCopy, onMove, onDownload
 }: Props) {
   const atRoot = normalizePath(path) === normalizePath(rootPath)
   const crumbs = breadcrumb(rootPath, path)
@@ -133,6 +135,22 @@ export default function FilePanel({
           打开
         </button>
         <button className="btn" onClick={onRename} disabled={!hasSelection}>重命名</button>
+        <button
+          className="btn"
+          onClick={onCopy}
+          disabled={!hasSelection}
+          title="复制所选项到指定目录（目标目录与源目录一致时自动加 copy_ 前缀）"
+        >
+          复制
+        </button>
+        <button
+          className="btn"
+          onClick={onMove}
+          disabled={!hasSelection}
+          title="移动所选项到指定目录（目标目录与源目录一致时不执行）"
+        >
+          移动
+        </button>
         <button className="btn" onClick={onDownload} disabled={!hasSelection} title="下载所选文件（可多任务并行）">
           下载
         </button>

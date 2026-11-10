@@ -77,6 +77,9 @@ export interface ElectronApi {
   uploadFiles: (connectionId: string, parentPath: string) => Promise<number>
   deleteEntry: (connectionId: string, path: string) => Promise<void>
   renameEntry: (connectionId: string, path: string, newName: string) => Promise<void>
+  // 复制/移动到目标目录（同目录复制加 copy_ 前缀，同目录移动不做任何操作）。
+  copyEntry: (connectionId: string, path: string, destDir: string) => Promise<void>
+  moveEntry: (connectionId: string, path: string, destDir: string) => Promise<void>
   // 发起下载，id 为渲染进程生成的任务标识（用于进度/控制事件对应）。
   downloadFile: (
     id: string,

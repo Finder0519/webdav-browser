@@ -512,8 +512,73 @@ body {
   width: 400px;
 }
 
+.dialog-md {
+  width: 560px;
+}
+
 .dialog-lg {
   width: 860px;
+}
+
+/* ---------- 目录选择树 ---------- */
+.dir-tree {
+  height: 320px;
+  overflow-y: auto;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 6px 0;
+  margin: 14px 0 10px;
+  background: var(--bg);
+}
+
+.dir-node-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 12px;
+  cursor: pointer;
+  font-size: 13px;
+  user-select: none;
+}
+
+.dir-node-row:hover {
+  background: var(--hover);
+}
+
+.dir-node-row.selected {
+  background: var(--selected);
+}
+
+.dir-toggle {
+  border: none;
+  background: transparent;
+  color: var(--muted);
+  cursor: pointer;
+  width: 18px;
+  min-width: 18px;
+  padding: 0;
+  font-size: 11px;
+  line-height: 1;
+}
+
+.dir-toggle.leaf {
+  cursor: default;
+}
+
+.dir-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.dir-node-sub {
+  padding: 2px 12px 2px 30px;
+}
+
+.dir-pick-hint {
+  min-height: 18px;
+  color: var(--muted);
+  font-size: 12px;
 }
 
 /* ---------- 文本编辑器 ---------- */
