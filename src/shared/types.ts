@@ -77,6 +77,8 @@ export interface ElectronApi {
   getConnection: (id: string) => Promise<Connection | null>
   saveConnection: (draft: ConnectionDraft) => Promise<ConnectionInfo>
   removeConnection: (id: string) => Promise<void>
+  // 按指定的 id 顺序重排连接列表（用于手动调整顺序）。
+  reorderConnections: (ids: string[]) => Promise<void>
   listDirectory: (connectionId: string, path: string) => Promise<WebDavListing>
   // 文件操作
   createDirectory: (connectionId: string, parentPath: string, name: string) => Promise<void>

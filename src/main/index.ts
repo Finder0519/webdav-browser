@@ -76,6 +76,7 @@ function registerIpcHandlers(): void {
   ipcMain.handle('connections:get', (_e, id: string) => store.getConnection(id))
   ipcMain.handle('connections:save', (_e, draft: ConnectionDraft) => store.saveConnection(draft))
   ipcMain.handle('connections:remove', (_e, id: string) => store.removeConnection(id))
+  ipcMain.handle('connections:reorder', (_e, ids: string[]) => store.reorderConnections(ids))
 
   ipcMain.handle('webdav:list', (_e, connectionId: string, path: string) =>
     webdav.listDirectory(requireConn(connectionId), path)

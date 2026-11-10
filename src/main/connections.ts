@@ -104,3 +104,20 @@ export function saveConnection(draft: ConnectionDraft): ConnectionInfo {
 export function removeConnection(id: string): void {
   writeAll(readAll().filter((c) => c.id !== id))
 }
+
+// 按 ids 顺序重排；ids 之外的记录保持原相对顺序追加到末尾。
+export function reorderConnections(ids: string[]): void {
+  const all = readAll()
+  const byId = new Map(all.map((c) => [c.id, c]))
+  const seen = new Set<string>()
+  const ordered: StoredConnection[] = []
+  for (const id of ids) {
+    const c = byId.get(id)
+    if (c && !seen.has(id)) {
+      ordered.push(c)
+      seen.add(id)
+    }
+  }
+  for (const c of all) if (!seen.has(c.id)) ordered.push(c)
+  writeAll(ordered)
+}

@@ -123,7 +123,6 @@ body {
 }
 
 .sidebar-head {
-  position: relative;
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -134,58 +133,6 @@ body {
 .sidebar-head h2 {
   margin: 0;
   font-size: 16px;
-}
-
-.sidebar-title {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-}
-
-.sort-btn.active {
-  color: var(--primary);
-}
-
-.sort-menu {
-  position: absolute;
-  top: calc(100% + 6px);
-  left: 16px;
-  z-index: 30;
-  min-width: 128px;
-  padding: 4px;
-  background: var(--card);
-  border: 1px solid var(--border);
-  border-radius: 8px;
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.12);
-  display: flex;
-  flex-direction: column;
-}
-
-.sort-option {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-  padding: 7px 10px;
-  border: none;
-  background: none;
-  color: var(--fg);
-  font-size: 13px;
-  text-align: left;
-  border-radius: 6px;
-  cursor: pointer;
-}
-
-.sort-option:hover {
-  background: var(--hover);
-}
-
-.sort-option.active {
-  color: var(--primary);
-}
-
-.sort-check {
-  color: var(--primary);
 }
 
 .conn-list {

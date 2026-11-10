@@ -12,6 +12,7 @@ const api: ElectronApi = {
   getConnection: (id) => ipcRenderer.invoke('connections:get', id),
   saveConnection: (draft: ConnectionDraft) => ipcRenderer.invoke('connections:save', draft),
   removeConnection: (id) => ipcRenderer.invoke('connections:remove', id),
+  reorderConnections: (ids) => ipcRenderer.invoke('connections:reorder', ids),
 
   listDirectory: (connectionId, path) => ipcRenderer.invoke('webdav:list', connectionId, path),
 

@@ -1,6 +1,6 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useState } from 'react'
 import { displayName } from '@shared/normalize'
-import { sortConnections, type ConnectionSortMode } from '@shared/sort'
+import { reorderConnections, type ConnectionReorderAction } from '@shared/sort'
 import type { ConnectionInfo } from '@shared/types'
 
 interface Props {
@@ -10,20 +10,8 @@ interface Props {
   onAdd: () => void
   onEdit: (id: string) => void
   onDelete: (id: string) => void
-}
-
-// 排序偏好存在 localStorage，重启后保留。
-const SORT_KEY = 'conn-sort-mode'
-
-const SORT_OPTIONS: { mode: ConnectionSortMode; label: string }[] = [
-  { mode: 'default', label: '默认顺序' },
-  { mode: 'name', label: '按名称' },
-  { mode: 'host', label: '按主机' }
-]
-
-function loadSortMode(): ConnectionSortMode {
-  const raw = localStorage.getItem(SORT_KEY)
-  return SORT_OPTIONS.some((o) => o.mode === raw) ? (raw as ConnectionSortMode) : 'default'
+  // 手动调整顺序后的新列表（App 负责写回并更新状态）。
+  onReorder: (order: ConnectionInfo[]) => void
 }
 
 // 侧边栏宽度：拖拽右边缘调整，偏好持久化。
@@ -41,28 +29,33 @@ function loadWidth(): number {
   return Number.isFinite(raw) ? clampWidth(raw) : WIDTH_DEFAULT
 }
 
-export default function Sidebar({ connections, selectedId, onSelect, onAdd, onEdit, onDelete }: Props) {
-  const [sortMode, setSortMode] = useState<ConnectionSortMode>(loadSortMode)
-  const [sortOpen, setSortOpen] = useState(false)
+export default function Sidebar({ connections, selectedId, onSelect, onAdd, onEdit, onDelete, onReorder }: Props) {
   const [width, setWidth] = useState(loadWidth)
-
-  const sorted = useMemo(() => sortConnections(connections, sortMode), [connections, sortMode])
-
-  useEffect(() => {
-    localStorage.setItem(SORT_KEY, sortMode)
-  }, [sortMode])
+  // 右键顺序菜单：anchor 为触发点坐标，conn 为触发对象。
+  const [orderMenu, setOrderMenu] = useState<{ x: number; y: number; conn: ConnectionInfo } | null>(null)
 
   useEffect(() => {
     localStorage.setItem(WIDTH_KEY, String(Math.round(width)))
   }, [width])
 
-  // 点击弹层外任意位置时关闭排序菜单。
+  // 右键菜单打开期间：点击 / 右键 / Esc / 失焦均关闭。
   useEffect(() => {
-    if (!sortOpen) return
-    const close = () => setSortOpen(false)
+    if (!orderMenu) return
+    const close = () => setOrderMenu(null)
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') close()
+    }
     document.addEventListener('click', close)
-    return () => document.removeEventListener('click', close)
-  }, [sortOpen])
+    document.addEventListener('contextmenu', close)
+    document.addEventListener('keydown', onKey)
+    window.addEventListener('blur', close)
+    return () => {
+      document.removeEventListener('click', close)
+      document.removeEventListener('contextmenu', close)
+      document.removeEventListener('keydown', onKey)
+      window.removeEventListener('blur', close)
+    }
+  }, [orderMenu])
 
   // 拖拽侧边栏右边缘：mousedown 后跟踪 mousemove，mouseup 结束。
   function startResize(e: React.MouseEvent) {
@@ -82,52 +75,38 @@ export default function Sidebar({ connections, selectedId, onSelect, onAdd, onEd
     window.addEventListener('blur', stop)
   }
 
-  const currentLabel = SORT_OPTIONS.find((o) => o.mode === sortMode)?.label
+  function openOrderMenu(e: React.MouseEvent, conn: ConnectionInfo) {
+    e.preventDefault()
+    e.stopPropagation()
+    setOrderMenu({ x: e.clientX, y: e.clientY, conn })
+  }
+
+  // 手动调整顺序：基于当前列表计算新顺序并交给 App 写回。
+  function applyReorder(conn: ConnectionInfo, action: ConnectionReorderAction) {
+    setOrderMenu(null)
+    const next = reorderConnections(connections, conn.id, action)
+    if (next !== connections) onReorder(next)
+  }
+
+  const menuLeft = orderMenu ? Math.min(orderMenu.x, window.innerWidth - 190) : 0
+  const menuTop = orderMenu ? Math.min(orderMenu.y, window.innerHeight - 140) : 0
 
   return (
     <aside className="sidebar" style={{ width }}>
       <div className="sidebar-head">
-        <div className="sidebar-title">
-          <h2>连接</h2>
-          <button
-            className={`icon-btn sort-btn${sortMode !== 'default' ? ' active' : ''}`}
-            title={`排序：${currentLabel}`}
-            onClick={(e) => {
-              e.stopPropagation()
-              setSortOpen((v) => !v)
-            }}
-          >
-            ⇅
-          </button>
-          {sortOpen && (
-            <div className="sort-menu" onClick={(e) => e.stopPropagation()}>
-              {SORT_OPTIONS.map((opt) => (
-                <button
-                  key={opt.mode}
-                  className={`sort-option${opt.mode === sortMode ? ' active' : ''}`}
-                  onClick={() => {
-                    setSortMode(opt.mode)
-                    setSortOpen(false)
-                  }}
-                >
-                  {opt.label}
-                  {opt.mode === sortMode && <span className="sort-check">✓</span>}
-                </button>
-              ))}
-            </div>
-          )}
-        </div>
+        <h2>连接</h2>
         <button className="btn btn-primary" onClick={onAdd}>
           + 添加
         </button>
       </div>
 
       <ul className="conn-list">
-        {sorted.map((conn) => (
+        {connections.map((conn) => (
           <li
             key={conn.id}
             className={`conn-item${conn.id === selectedId ? ' selected' : ''}`}
             onClick={() => onSelect(conn)}
+            onContextMenu={(e) => openOrderMenu(e, conn)}
           >
             <div className="conn-main">
               <span className="conn-name">{displayName(conn.name, conn.host, conn.port)}</span>
@@ -148,6 +127,27 @@ export default function Sidebar({ connections, selectedId, onSelect, onAdd, onEd
         ))}
         {connections.length === 0 && <li className="conn-empty">暂无连接，点击「添加」新建</li>}
       </ul>
+
+      {orderMenu && (
+        <div
+          className="context-menu"
+          style={{ left: menuLeft, top: menuTop }}
+          onContextMenu={(e) => e.preventDefault()}
+        >
+          {(
+            [
+              { id: 'top', label: '置顶', action: 'top' },
+              { id: 'up', label: '向上', action: 'up' },
+              { id: 'down', label: '向下', action: 'down' },
+              { id: 'bottom', label: '置底', action: 'bottom' }
+            ] as { id: string; label: string; action: ConnectionReorderAction }[]
+          ).map((it) => (
+            <button key={it.id} className="menu-item" onClick={() => applyReorder(orderMenu.conn, it.action)}>
+              {it.label}
+            </button>
+          ))}
+        </div>
+      )}
 
       <div className="sidebar-resizer" onMouseDown={startResize} title="拖动调整宽度" />
     </aside>

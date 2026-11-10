@@ -394,6 +394,16 @@ export default function App() {
     }
   }
 
+  // 手动调整连接顺序：新顺序写回存储并更新本地列表。
+  async function handleReorder(order: ConnectionInfo[]) {
+    try {
+      await window.api.reorderConnections(order.map((c) => c.id))
+      setConnections(order)
+    } catch (e) {
+      window.alert('调整顺序失败：' + errMsg(e))
+    }
+  }
+
   const selectedConn = connections.find((c) => c.id === selectedId)
   const rootPath = selectedConn ? normalizePath(selectedConn.basePath) : '/'
 
@@ -406,6 +416,7 @@ export default function App() {
         onAdd={openAdd}
         onEdit={openEdit}
         onDelete={handleDeleteConnection}
+        onReorder={handleReorder}
       />
 
       <FilePanel

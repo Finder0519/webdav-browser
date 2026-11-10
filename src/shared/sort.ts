@@ -1,4 +1,3 @@
-import { displayName } from './normalize'
 import type { ConnectionInfo, WebDavEntry } from './types'
 
 // 文件类型 = 扩展名（小写）；隐藏文件 / 无扩展名为空串。
@@ -19,12 +18,26 @@ export function compareEntries(a: WebDavEntry, b: WebDavEntry): number {
   return a.name.localeCompare(b.name, 'zh-Hans-CN')
 }
 
-// 连接列表排序模式：default 保持添加顺序，name/host 按显示键中文排序。
-export type ConnectionSortMode = 'default' | 'name' | 'host'
+// 手动调整顺序的动作：置顶 / 上移一位 / 下移一位 / 置底。
+export type ConnectionReorderAction = 'top' | 'up' | 'down' | 'bottom'
 
-// 排序后的新数组；default 模式返回原数组。
-export function sortConnections(list: ConnectionInfo[], mode: ConnectionSortMode): ConnectionInfo[] {
-  if (mode === 'default') return list
-  const key = mode === 'name' ? (c: ConnectionInfo) => displayName(c.name, c.host, c.port) : (c: ConnectionInfo) => c.host
-  return [...list].sort((a, b) => key(a).localeCompare(key(b), 'zh-Hans-CN'))
+// 将 id 对应的连接移动到新位置，返回新数组；无法移动（已在边界）时返回原数组。
+export function reorderConnections(
+  list: ConnectionInfo[],
+  id: string,
+  action: ConnectionReorderAction
+): ConnectionInfo[] {
+  const idx = list.findIndex((c) => c.id === id)
+  if (idx < 0) return list
+  const next = [...list]
+  if (action === 'up' || action === 'down') {
+    const j = action === 'up' ? idx - 1 : idx + 1
+    if (j < 0 || j >= next.length) return list
+    ;[next[idx], next[j]] = [next[j], next[idx]]
+    return next
+  }
+  const [item] = next.splice(idx, 1)
+  if (action === 'top') next.unshift(item)
+  else next.push(item)
+  return next
 }
