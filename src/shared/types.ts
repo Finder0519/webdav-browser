@@ -47,4 +47,14 @@ export interface ElectronApi {
   saveConnection: (draft: ConnectionDraft) => Promise<ConnectionInfo>
   removeConnection: (id: string) => Promise<void>
   listDirectory: (connectionId: string, path: string) => Promise<WebDavListing>
+  // 文件操作
+  createDirectory: (connectionId: string, parentPath: string, name: string) => Promise<void>
+  createTextFile: (connectionId: string, parentPath: string, name: string) => Promise<void>
+  uploadFiles: (connectionId: string, parentPath: string) => Promise<number>
+  deleteEntry: (connectionId: string, path: string) => Promise<void>
+  renameEntry: (connectionId: string, path: string, newName: string) => Promise<void>
+  downloadFile: (connectionId: string, path: string, suggestedName: string) => Promise<string | null>
+  // 文本读写
+  readTextFile: (connectionId: string, path: string) => Promise<string>
+  writeTextFile: (connectionId: string, path: string, content: string) => Promise<void>
 }

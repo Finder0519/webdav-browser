@@ -32,3 +32,30 @@ export function joinPath(dir: string, name: string): string {
   const child = (name ?? '').replace(/^\/+/, '')
   return base === '/' ? `/${child}` : `${base}/${child}`
 }
+
+export interface Crumb {
+  label: string
+  path: string
+}
+
+// 面包屑分段：从默认路径（根，不可上跳）到当前路径的各级。
+export function breadcrumb(basePath: string, currentPath: string): Crumb[] {
+  const base = normalizePath(basePath)
+  const current = normalizePath(currentPath)
+  const baseLabel = base === '/' ? '/' : base.slice(base.lastIndexOf('/') + 1)
+  const crumbs: Crumb[] = [{ label: baseLabel, path: base }]
+
+  if (current === base) return crumbs
+
+  let rel: string
+  if (base === '/') rel = current
+  else if (current.startsWith(base + '/')) rel = current.slice(base.length)
+  else return crumbs // 当前路径不在默认路径之下，仅显示根
+
+  let acc = base === '/' ? '' : base
+  for (const part of rel.split('/').filter(Boolean)) {
+    acc += '/' + part
+    crumbs.push({ label: part, path: acc })
+  }
+  return crumbs
+}

@@ -1,11 +1,24 @@
+import { breadcrumb, normalizePath, parentPath } from '@shared/normalize'
+import { fileKind } from '@shared/filekind'
 import type { WebDavEntry, WebDavListing } from '@shared/types'
 
 interface Props {
+  rootPath: string
   path: string
   listing: WebDavListing | null
   loading: boolean
   error: string | null
+  selectedPath: string | null
   onNavigate: (path: string) => void
+  onRefresh: () => void
+  onSelect: (entry: WebDavEntry | null) => void
+  onOpen: (entry: WebDavEntry) => void
+  onCreateFolder: () => void
+  onCreateFile: () => void
+  onUpload: () => void
+  onDelete: () => void
+  onRename: () => void
+  onDownload: () => void
 }
 
 function formatSize(bytes: number, type: string): string {
@@ -27,20 +40,74 @@ function formatDate(raw: string): string {
   return Number.isNaN(date.getTime()) ? raw : date.toLocaleString()
 }
 
-export default function FilePanel({ path, listing, loading, error, onNavigate }: Props) {
+function entryIcon(entry: WebDavEntry): string {
+  if (entry.type === 'directory') return '📁'
+  switch (fileKind(entry.name)) {
+    case 'image':
+      return '🖼️'
+    case 'audio':
+      return '🎵'
+    case 'video':
+      return '🎬'
+    case 'text':
+      return '📝'
+    default:
+      return '📄'
+  }
+}
+
+export default function FilePanel({
+  rootPath, path, listing, loading, error, selectedPath,
+  onNavigate, onRefresh, onSelect, onOpen,
+  onCreateFolder, onCreateFile, onUpload, onDelete, onRename, onDownload
+}: Props) {
+  const atRoot = normalizePath(path) === normalizePath(rootPath)
+  const crumbs = breadcrumb(rootPath, path)
+  const hasSelection = Boolean(selectedPath)
+
   return (
     <section className="file-panel">
       <div className="path-bar">
         <button
           className="btn"
-          disabled={!listing?.parent}
-          onClick={() => listing?.parent && onNavigate(listing.parent)}
+          disabled={atRoot}
+          title={atRoot ? '已到默认路径，无法再上一级' : '返回上一级'}
+          onClick={() => {
+            const parent = parentPath(path)
+            if (!atRoot && parent) onNavigate(parent)
+          }}
         >
           ↑ 上一级
         </button>
-        <span className="current-path" title={path}>
-          {path}
-        </span>
+
+        <button className="btn" title="刷新当前目录" onClick={onRefresh}>
+          ⟳ 刷新
+        </button>
+
+        <nav className="breadcrumb">
+          {crumbs.map((crumb, i) => (
+            <span className="crumb-wrap" key={crumb.path}>
+              {i > 0 && <span className="crumb-sep">/</span>}
+              {i === crumbs.length - 1 ? (
+                <span className="crumb current">{crumb.label}</span>
+              ) : (
+                <button className="crumb" title={crumb.path} onClick={() => onNavigate(crumb.path)}>
+                  {crumb.label}
+                </button>
+              )}
+            </span>
+          ))}
+        </nav>
+      </div>
+
+      <div className="toolbar">
+        <button className="btn" onClick={onCreateFolder}>新建文件夹</button>
+        <button className="btn" onClick={onCreateFile}>新建文本文件</button>
+        <button className="btn" onClick={onUpload}>上传</button>
+        <span className="toolbar-sep" />
+        <button className="btn" onClick={onRename} disabled={!hasSelection}>重命名</button>
+        <button className="btn" onClick={onDownload} disabled={!hasSelection}>下载</button>
+        <button className="btn btn-danger" onClick={onDelete} disabled={!hasSelection}>删除</button>
       </div>
 
       <div className="file-body">
@@ -62,11 +129,14 @@ export default function FilePanel({ path, listing, loading, error, onNavigate }:
               {listing.entries.map((entry: WebDavEntry) => (
                 <tr
                   key={entry.path}
-                  className={entry.type === 'directory' ? 'row-dir' : 'row-file'}
-                  onClick={() => entry.type === 'directory' && onNavigate(entry.path)}
+                  className={`${entry.type === 'directory' ? 'row-dir' : 'row-file'}${
+                    entry.path === selectedPath ? ' selected' : ''
+                  }`}
+                  onClick={() => onSelect(entry)}
+                  onDoubleClick={() => onOpen(entry)}
                 >
                   <td>
-                    <span className="entry-icon">{entry.type === 'directory' ? '📁' : '📄'}</span>
+                    <span className="entry-icon">{entryIcon(entry)}</span>
                     <span className="entry-name">{entry.name}</span>
                   </td>
                   <td className="col-size">{formatSize(entry.size, entry.type)}</td>

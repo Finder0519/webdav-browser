@@ -11,7 +11,20 @@ const api: ElectronApi = {
   saveConnection: (draft: ConnectionDraft) => ipcRenderer.invoke('connections:save', draft),
   removeConnection: (id) => ipcRenderer.invoke('connections:remove', id),
 
-  listDirectory: (connectionId, path) => ipcRenderer.invoke('webdav:list', connectionId, path)
+  listDirectory: (connectionId, path) => ipcRenderer.invoke('webdav:list', connectionId, path),
+
+  createDirectory: (connectionId, parentPath, name) =>
+    ipcRenderer.invoke('files:mkdir', connectionId, parentPath, name),
+  createTextFile: (connectionId, parentPath, name) =>
+    ipcRenderer.invoke('files:createText', connectionId, parentPath, name),
+  uploadFiles: (connectionId, parentPath) => ipcRenderer.invoke('files:upload', connectionId, parentPath),
+  deleteEntry: (connectionId, path) => ipcRenderer.invoke('files:delete', connectionId, path),
+  renameEntry: (connectionId, path, newName) => ipcRenderer.invoke('files:rename', connectionId, path, newName),
+  downloadFile: (connectionId, path, suggestedName) =>
+    ipcRenderer.invoke('files:download', connectionId, path, suggestedName),
+
+  readTextFile: (connectionId, path) => ipcRenderer.invoke('text:read', connectionId, path),
+  writeTextFile: (connectionId, path, content) => ipcRenderer.invoke('text:write', connectionId, path, content)
 }
 
 contextBridge.exposeInMainWorld('api', api)
