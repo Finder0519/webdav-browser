@@ -23,3 +23,5 @@ npm-debug.log*
 
 # 任务测试目录（含私密测试凭据，不进版本库）
 work/
+
+.npmrc
