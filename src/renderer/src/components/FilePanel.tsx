@@ -1,8 +1,8 @@
 import { useEffect, useState } from 'react'
-import type { MouseEvent as ReactMouseEvent } from 'react'
+import type { DragEvent as ReactDragEvent, MouseEvent as ReactMouseEvent } from 'react'
 import { breadcrumb, normalizePath, parentPath } from '@shared/normalize'
 import { fileKind } from '@shared/filekind'
-import type { DownloadControlAction, WebDavEntry, WebDavListing } from '@shared/types'
+import type { DownloadControlAction, UploadProgress, WebDavEntry, WebDavListing } from '@shared/types'
 
 interface Props {
   rootPath: string
@@ -11,6 +11,9 @@ interface Props {
   loading: boolean
   error: string | null
   selectedEntry: WebDavEntry | null
+  uploadProgress: UploadProgress | null
+  onDropUpload: (paths: string[]) => void
+  onUploadCancel: () => void
   downloadTasks: DownloadTask[]
   onDownloadControl: (id: string, action: DownloadControlAction) => void
   onDismissDownload: (id: string) => void
@@ -80,6 +83,7 @@ function entryIcon(entry: WebDavEntry): string {
 
 export default function FilePanel({
   rootPath, path, listing, loading, error, selectedEntry,
+  uploadProgress, onDropUpload, onUploadCancel,
   downloadTasks, onDownloadControl, onDismissDownload,
   onNavigate, onRefresh, onCopyPath, copyPathTarget, onSelect, onOpen,
   onCreateFolder, onCreateFile, onUpload, onDelete, onRename, onCopy, onMove, onDownload, onOpenInPlayer,
@@ -88,6 +92,30 @@ export default function FilePanel({
   const [copied, setCopied] = useState(false)
   // 右键菜单：anchor 为触发点的屏幕坐标，entry 为触发对象（null 表示空白区域/目录级菜单）。
   const [menu, setMenu] = useState<{ x: number; y: number; entry: WebDavEntry | null } | null>(null)
+  // 拖拽上传：为 true 时显示整面板的「松开上传」遮罩。
+  const [dragOver, setDragOver] = useState(false)
+
+  // 仅当拖入的是文件（而非文本等）时进入高亮状态。
+  function handleDragEnterOrOver(e: ReactDragEvent) {
+    if (Array.from(e.dataTransfer.types).includes('Files')) {
+      e.preventDefault()
+      setDragOver(true)
+    }
+  }
+  function handleDragLeave(e: ReactDragEvent) {
+    // 只在真正离开面板（而非移动到子元素）时取消高亮。
+    if (!e.currentTarget.contains(e.relatedTarget as Node | null)) setDragOver(false)
+  }
+  function handleDrop(e: ReactDragEvent) {
+    e.preventDefault()
+    e.stopPropagation()
+    setDragOver(false)
+    // 把浏览器拖入的 File 解析为本地路径，提交给当前目录上传。
+    const paths = Array.from(e.dataTransfer.files)
+      .map((f) => window.api.getPathForFile(f))
+      .filter((p) => Boolean(p))
+    if (paths.length > 0) onDropUpload(paths)
+  }
   useEffect(() => {
     if (!copied) return
     const timer = setTimeout(() => setCopied(false), 1500)
@@ -178,7 +206,14 @@ export default function FilePanel({
   const menuTop = menu ? Math.min(menu.y, window.innerHeight - 220) : 0
 
   return (
-    <section className="file-panel">
+    <section
+      className="file-panel"
+      onDragEnter={handleDragEnterOrOver}
+      onDragOver={handleDragEnterOrOver}
+      onDragLeave={handleDragLeave}
+      onDrop={handleDrop}
+    >
+      {dragOver && <div className="drop-overlay">松开即可上传到当前目录</div>}
       <div className="path-bar">
         <button
           className="btn"
@@ -211,6 +246,43 @@ export default function FilePanel({
           ))}
         </nav>
       </div>
+
+      {uploadProgress && (
+        <div className="upload-panel">
+          <span className="upload-name" title={uploadProgress.file}>
+            ⤴ 上传中 · {uploadProgress.file}
+          </span>
+          <div className="progress-track">
+            <div
+              className="progress-fill"
+              style={{
+                width: `${
+                  uploadProgress.total > 0
+                    ? Math.min(100, Math.floor((uploadProgress.received / uploadProgress.total) * 100))
+                    : 0
+                }%`
+              }}
+            />
+          </div>
+          <span className="upload-meta">
+            {uploadProgress.total > 0
+              ? `${formatSize(uploadProgress.received)} / ${formatSize(uploadProgress.total)}（${
+                  uploadProgress.received
+                  > 0
+                    ? Math.min(100, Math.floor((uploadProgress.received / uploadProgress.total) * 100))
+                    : 0
+                }%）`
+              : formatSize(uploadProgress.received)}
+          </span>
+          <button
+            className="btn btn-sm btn-danger"
+            title="取消上传（当前文件可能已部分写入服务器）"
+            onClick={onUploadCancel}
+          >
+            ✕ 取消
+          </button>
+        </div>
+      )}
 
       <div className="toolbar">
         <button className="btn" onClick={onCreateFolder}>新建文件夹</button>

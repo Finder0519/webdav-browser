@@ -47,6 +47,19 @@ export interface DownloadProgress {
   total: number
 }
 
+// 上传总进度（received/total 为整批累计字节数，file 为当前正在上传的文件名）。
+export interface UploadProgress {
+  file: string
+  received: number
+  total: number
+}
+
+// 上传结果：count 为成功上传的文件数，cancelled 表示是否被中途取消。
+export interface UploadResult {
+  count: number
+  cancelled: boolean
+}
+
 // 下载中断信息（网络错误后已有进度，可断点续传）。
 export interface DownloadInterrupted {
   id: string
@@ -83,7 +96,19 @@ export interface ElectronApi {
   // 文件操作
   createDirectory: (connectionId: string, parentPath: string, name: string) => Promise<void>
   createTextFile: (connectionId: string, parentPath: string, name: string) => Promise<void>
-  uploadFiles: (connectionId: string, parentPath: string) => Promise<number>
+  // 发起上传（弹选择框），id 为渲染进程生成的任务标识，用于进度对应与取消。
+  uploadFiles: (id: string, connectionId: string, parentPath: string) => Promise<UploadResult>
+  // 拖拽上传：传入已解析的本地文件路径数组直接上传（不弹选择框），id 用于进度对应与取消。
+  uploadFilePaths: (
+    id: string,
+    connectionId: string,
+    parentPath: string,
+    localPaths: string[]
+  ) => Promise<UploadResult>
+  // 取消指定上传任务，返回该任务是否存在。
+  cancelUpload: (id: string) => Promise<boolean>
+  // 将渲染进程拖入的 File 对象解析为本地文件路径（Electron 限定，未拖入时返回空字符串）。
+  getPathForFile: (file: File) => string
   deleteEntry: (connectionId: string, path: string) => Promise<void>
   renameEntry: (connectionId: string, path: string, newName: string) => Promise<void>
   // 复制/移动到目标目录（同目录复制加 copy_ 前缀，同目录移动不做任何操作）。
@@ -97,6 +122,8 @@ export interface ElectronApi {
     suggestedName: string,
     totalSize: number
   ) => Promise<DownloadResult>
+  // 订阅上传总进度，返回取消订阅函数。
+  onUploadProgress: (callback: (progress: UploadProgress) => void) => () => void
   // 订阅下载进度，返回取消订阅函数。
   onDownloadProgress: (callback: (progress: DownloadProgress) => void) => () => void
   // 订阅下载中断通知，返回取消订阅函数。

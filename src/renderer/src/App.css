@@ -204,6 +204,23 @@ body {
   display: flex;
   flex-direction: column;
   min-width: 0;
+  position: relative;
+}
+
+/* 拖拽上传遮罩：松开文件即上传到当前目录。 */
+.drop-overlay {
+  position: absolute;
+  inset: 0;
+  z-index: 10;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 16px;
+  font-size: 15px;
+  color: var(--primary);
+  border: 2px dashed var(--primary);
+  background: color-mix(in srgb, var(--primary) 12%, transparent);
+  pointer-events: none;
 }
 
 .path-bar {
@@ -468,6 +485,39 @@ body {
 .btn-danger:hover:not(:disabled) {
   background: var(--danger);
   color: var(--primary-fg);
+}
+
+/* ---------- 上传进度面板 ---------- */
+.upload-panel {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 16px;
+  font-size: 12px;
+  color: var(--muted);
+  background: var(--card);
+  border-bottom: 1px solid var(--border);
+}
+
+.upload-name {
+  max-width: 260px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--fg);
+}
+
+.upload-meta {
+  flex: 1;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.upload-panel .btn-sm {
+  padding: 3px 10px;
+  font-size: 12px;
+  white-space: nowrap;
 }
 
 /* ---------- 下载任务面板 ---------- */

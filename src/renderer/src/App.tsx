@@ -7,6 +7,7 @@ import type {
   ConnectionInfo,
   DownloadControlAction,
   DownloadInterrupted,
+  UploadProgress,
   WebDavEntry,
   WebDavListing
 } from '@shared/types'
@@ -62,6 +63,11 @@ export default function App() {
   // 下载任务列表：多任务并行，id 由渲染进程生成供事件对应。
   const [downloadTasks, setDownloadTasks] = useState<DownloadTask[]>([])
   const speedMapRef = useRef(new Map<string, { lastTime: number; lastBytes: number; speed: number }>())
+
+  // 上传总进度（单条累计进度条；null 表示无正在进行的上传）。
+  const [uploadProgress, setUploadProgress] = useState<UploadProgress | null>(null)
+  // 当前上传任务 id：供「取消」操作与主进程的进行中任务对应。
+  const uploadIdRef = useRef<string | null>(null)
 
   const load = useCallback(async (id: string, path: string) => {
     setLoading(true)
@@ -223,12 +229,44 @@ export default function App() {
 
   async function upload() {
     if (!selectedId) return
+    const id = newTaskId()
+    uploadIdRef.current = id
     try {
-      const count = await window.api.uploadFiles(selectedId, currentPath)
-      if (count > 0) refresh()
+      const result = await window.api.uploadFiles(id, selectedId, currentPath)
+      if (result.count > 0) refresh()
+      if (result.cancelled) window.alert('上传已取消（当前文件可能已部分写入服务器）')
     } catch (e) {
       window.alert('上传失败：' + errMsg(e))
+    } finally {
+      uploadIdRef.current = null
+      setUploadProgress(null)
     }
+  }
+
+  // 订阅上传总进度，更新单条累计进度条。
+  useEffect(() => window.api.onUploadProgress((p) => setUploadProgress(p)), [])
+
+  // 拖拽上传：直接使用已解析的本地路径，不弹选择框。
+  async function uploadPaths(paths: string[]) {
+    if (!selectedId || paths.length === 0) return
+    const id = newTaskId()
+    uploadIdRef.current = id
+    try {
+      const result = await window.api.uploadFilePaths(id, selectedId, currentPath, paths)
+      if (result.count > 0) refresh()
+      if (result.cancelled) window.alert('上传已取消（当前文件可能已部分写入服务器）')
+    } catch (e) {
+      window.alert('上传失败：' + errMsg(e))
+    } finally {
+      uploadIdRef.current = null
+      setUploadProgress(null)
+    }
+  }
+
+  // 取消当前正在进行的上传（无进行中任务时无操作）。
+  function cancelUpload() {
+    const id = uploadIdRef.current
+    if (id) void window.api.cancelUpload(id)
   }
 
   function renameEntry() {
@@ -408,7 +446,12 @@ export default function App() {
   const rootPath = selectedConn ? normalizePath(selectedConn.basePath) : '/'
 
   return (
-    <div className="app">
+    <div
+      className="app"
+      // 阻止整窗拖入文件时被浏览器默认为「打开文件」导航；具体落点由 FilePanel 处理上传。
+      onDragOver={(e) => e.preventDefault()}
+      onDrop={(e) => e.preventDefault()}
+    >
       <Sidebar
         connections={connections}
         selectedId={selectedId}
@@ -445,6 +488,9 @@ export default function App() {
         downloadTasks={downloadTasks}
         onDownloadControl={controlDownload}
         onDismissDownload={dismissDownload}
+        uploadProgress={uploadProgress}
+        onDropUpload={uploadPaths}
+        onUploadCancel={cancelUpload}
       />
 
       {dialogOpen && (

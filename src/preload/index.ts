@@ -1,6 +1,6 @@
-import { contextBridge, ipcRenderer } from 'electron'
+import { contextBridge, ipcRenderer, webUtils } from 'electron'
 import type { IpcRendererEvent } from 'electron'
-import type { ConnectionDraft, DownloadInterrupted, DownloadProgress, ElectronApi } from '../shared/types'
+import type { ConnectionDraft, DownloadInterrupted, DownloadProgress, ElectronApi, UploadProgress } from '../shared/types'
 
 // 通过 contextBridge 安全地把受控 API 暴露给渲染进程。
 const api: ElectronApi = {
@@ -20,7 +20,19 @@ const api: ElectronApi = {
     ipcRenderer.invoke('files:mkdir', connectionId, parentPath, name),
   createTextFile: (connectionId, parentPath, name) =>
     ipcRenderer.invoke('files:createText', connectionId, parentPath, name),
-  uploadFiles: (connectionId, parentPath) => ipcRenderer.invoke('files:upload', connectionId, parentPath),
+  uploadFiles: (id, connectionId, parentPath) =>
+    ipcRenderer.invoke('files:upload', id, connectionId, parentPath),
+  uploadFilePaths: (id, connectionId, parentPath, localPaths) =>
+    ipcRenderer.invoke('files:upload:paths', id, connectionId, parentPath, localPaths),
+  cancelUpload: (id) => ipcRenderer.invoke('files:upload:cancel', id),
+  getPathForFile: (file) => webUtils.getPathForFile(file),
+  onUploadProgress: (callback) => {
+    const listener = (_event: IpcRendererEvent, progress: UploadProgress) => callback(progress)
+    ipcRenderer.on('files:upload:progress', listener)
+    return () => {
+      ipcRenderer.removeListener('files:upload:progress', listener)
+    }
+  },
   deleteEntry: (connectionId, path) => ipcRenderer.invoke('files:delete', connectionId, path),
   renameEntry: (connectionId, path, newName) => ipcRenderer.invoke('files:rename', connectionId, path, newName),
   copyEntry: (connectionId, path, destDir) => ipcRenderer.invoke('files:copy', connectionId, path, destDir),

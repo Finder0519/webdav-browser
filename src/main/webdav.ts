@@ -1,10 +1,12 @@
-import { createReadStream, createWriteStream, unlink } from 'fs'
+import { createReadStream, createWriteStream, statSync, unlink } from 'fs'
 import type { WriteStream } from 'fs'
 import type { Readable } from 'stream'
+import * as http from 'http'
+import * as https from 'https'
 import { basename } from 'path'
 import { normalizePath, joinPath, parentPath } from '../shared/normalize'
 import { compareEntries } from '../shared/sort'
-import type { Connection, WebDavEntry, WebDavListing } from '../shared/types'
+import type { Connection, UploadProgress, WebDavEntry, WebDavListing } from '../shared/types'
 
 // webdav 为 ESM-only，主进程打包为 CJS，故用动态 import 引入。
 export async function makeClient(conn: Connection): Promise<import('webdav').WebDAVClient> {
@@ -53,12 +55,171 @@ export async function createTextFile(conn: Connection, parent: string, name: str
   await client.putFileContents(joinPath(parent, name), '')
 }
 
-export async function uploadFiles(conn: Connection, parent: string, localPaths: string[]): Promise<number> {
-  const client = await makeClient(conn)
-  for (const local of localPaths) {
-    await client.putFileContents(joinPath(parent, basename(local)), createReadStream(local))
+// 上传取消控制器：登记当前请求/流并在 cancel 时物理中断它们；
+// pendingDelete 记录被中断的「新建」文件目标路径，供取消后安全清理服务端残留。
+export interface UploadController {
+  aborted: boolean
+  resources: Set<http.ClientRequest | Readable>
+  pendingDelete: string[]
+  cancel: () => void
+}
+export function createUploadController(): UploadController {
+  const resources = new Set<http.ClientRequest | Readable>()
+  const controller: UploadController = {
+    aborted: false,
+    resources,
+    pendingDelete: [],
+    cancel: () => {
+      controller.aborted = true
+      for (const r of controller.resources) {
+        if (typeof (r as http.ClientRequest).destroy === 'function') (r as http.ClientRequest).destroy()
+      }
+      controller.resources.clear()
+    }
   }
-  return localPaths.length
+  return controller
+}
+
+// 手动把 WebDAV 目标路径逐段转义，拼接为完整的 URL（node 的 http(s) 请求需要完整地址）。
+function uploadUrl(conn: Connection, targetPath: string): string {
+  const base = `${conn.https ? 'https' : 'http'}://${conn.host}:${conn.port}`
+  const encoded = targetPath.split('/').map((seg) => encodeURIComponent(seg)).join('/')
+  return base + encoded
+}
+
+// 自实现 HTTP(S) PUT 上传：本地流直接作为请求体，用流的 'data' 事件统计实时字节做进度。
+// （webdav 库的 putFileContents 底层用 fetch，不提供流式上传进度回调，故这里取 http/https 直连。）
+// controller 传入后可即时取消：中断当前请求与流，取消时 Promise 正常 resolve（不当作错误抛出）。
+// isNew 表示上传前该目标不存在（本次为「新建」）；取消被中断时若为新建，则登记到 pendingDelete 待清理残留，
+// 覆盖已有文件（isNew=false）时绝不登记，避免误删原有文件。
+function putFile(
+  conn: Connection,
+  targetPath: string,
+  localPath: string,
+  contentLength: number,
+  onLoaded: (bytes: number) => void,
+  controller?: UploadController,
+  isNew = false
+): Promise<void> {
+  const mod = conn.https ? https : http
+  const headers: Record<string, string> = {
+    'Content-Type': 'application/octet-stream',
+    'Content-Length': String(contentLength)
+  }
+  if (conn.username || conn.password) {
+    headers['Authorization'] = 'Basic ' + Buffer.from(`${conn.username}:${conn.password}`).toString('base64')
+  }
+  return new Promise<void>((resolve, reject) => {
+    // 取消中断且为新建时登记残留路径（去重），供取消后清理。
+    const registerPending = () => {
+      if (controller?.aborted && isNew && controller && !controller.pendingDelete.includes(targetPath)) {
+        controller.pendingDelete.push(targetPath)
+      }
+    }
+    // 取消（controller.aborted）时所有中断都以正常 resolve 结束，不当作错误抛出。
+    const commitError = (err: Error) => {
+      if (controller?.aborted) {
+        registerPending()
+        resolve()
+      } else {
+        reject(err)
+      }
+    }
+    const stream = createReadStream(localPath)
+    let loaded = 0
+    const req = mod.request(uploadUrl(conn, targetPath), { method: 'PUT', headers }, (res) => {
+      res.setEncoding('utf8')
+      res.on('data', () => undefined) // 排空响应体
+      res.on('end', () => {
+        if (controller?.aborted) {
+          registerPending()
+          resolve()
+          return
+        }
+        if (res.statusCode && res.statusCode >= 200 && res.statusCode < 300) {
+          resolve()
+          return
+        }
+        const auth = String(res.headers['www-authenticate'] ?? '')
+        const msg =
+          res.statusCode === 401 && /digest/i.test(auth)
+            ? '服务器使用 Digest 认证，当前上传实现仅支持 Basic 认证'
+            : `上传失败（HTTP ${res.statusCode ?? '未知'}）`
+        reject(new Error(msg))
+      })
+      res.on('error', () => commitError(new Error('上传过程中连接出错')))
+    })
+    controller?.resources.add(req)
+    req.on('error', () => commitError(new Error('上传过程中连接出错')))
+    controller?.resources.add(stream)
+    stream.on('data', (chunk: Buffer) => {
+      if (controller?.aborted) return
+      loaded += chunk.length
+      onLoaded(loaded)
+    })
+    stream.on('error', () => commitError(new Error('读取本地文件出错')))
+    stream.pipe(req) // 默认 end=true：流结束时自动调用 req.end()，响应回调负责 resolve/reject
+  })
+}
+
+// 目标名已存在时，找一个带 copy_ 前缀且不冲突的唯一名（copy_原名、copy_2_原名…）。
+export async function findFreeName(client: import('webdav').WebDAVClient, parent: string, baseName: string): Promise<string> {
+  let index = 1
+  for (;;) {
+    const name = index === 1 ? `copy_${baseName}` : `copy_${index}_${baseName}`
+    const target = joinPath(parent, name)
+    try {
+      if (!(await client.exists(target))) return target
+    } catch {
+      return target // 探测失败时直接采用该名（正常上传不受影响）
+    }
+    index += 1
+  }
+}
+
+export async function uploadFiles(
+  conn: Connection,
+  parent: string,
+  localPaths: string[],
+  onProgress?: (p: UploadProgress) => void,
+  controller?: UploadController
+): Promise<{ count: number; cancelled: boolean }> {
+  // 以本地文件大小作整批总字节，作为进度分母。
+  let total = 0
+  for (const local of localPaths) total += statSync(local).size
+  const client = await makeClient(conn)
+  let done = 0
+  let count = 0
+  for (const local of localPaths) {
+    if (controller?.aborted) break
+    const fileSize = statSync(local).size
+    const baseName = basename(local)
+    // 目标名存在同名时自动加 copy_ 前缀，避免覆盖；目标名因此始终是「新建」，取消清理残留也更安全。
+    const target = (await client.exists(joinPath(parent, baseName)))
+      ? await findFreeName(client, parent, baseName)
+      : joinPath(parent, baseName)
+    let fileLoaded = 0
+    await putFile(conn, target, local, fileSize, (loaded) => {
+      fileLoaded = loaded
+      onProgress?.({ file: basename(target), received: done + fileLoaded, total })
+    }, controller, true) // 目标名保证新建，取消中断产生的残留纳入清理
+    if (controller?.aborted) break
+    done += fileSize
+    count += 1
+    onProgress?.({ file: basename(target), received: done, total })
+  }
+  // 取消后清理服务端残留：目标名都是本次新建，删除被中断的残留即可（不涉及覆盖原有文件）。
+  if (controller?.aborted && controller.pendingDelete.length > 0) {
+    for (const path of controller.pendingDelete) {
+      try {
+        await deleteEntry(conn, path)
+      } catch {
+        // 残留可能未创建或已被服务端处理，尽力清理即可，忽略错误。
+      }
+    }
+    controller.pendingDelete = []
+  }
+  return { count, cancelled: Boolean(controller?.aborted) }
 }
 
 export async function deleteEntry(conn: Connection, path: string): Promise<void> {

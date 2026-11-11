@@ -82,6 +82,8 @@ function buildAppMenu(): Menu | null {
 }
 
 const activeDownloads = new Map<string, { handle: webdav.DownloadHandle; localPath: string }>()
+// 活动上传任务表：id 由渲染进程生成，供取消操作与任务对应。
+const activeUploads = new Map<string, webdav.UploadController>()
 
 function createWindow(): void {
   const mainWindow = new BrowserWindow({
@@ -144,13 +146,51 @@ function registerIpcHandlers(): void {
   ipcMain.handle('files:createText', (_e, connectionId: string, parentPath: string, name: string) =>
     webdav.createTextFile(requireConn(connectionId), parentPath, name)
   )
-  ipcMain.handle('files:upload', async (_e, connectionId: string, parentPath: string) => {
+  // 执行上传并向渲染进程推送字节级累计进度（带 150ms 节流与重复值去重）。
+  const runUpload = (
+    e: Electron.IpcMainInvokeEvent,
+    id: string,
+    connectionId: string,
+    parentPath: string,
+    localPaths: string[]
+  ): Promise<{ count: number; cancelled: boolean }> => {
+    const sender = e.sender
+    let lastSent = 0
+    let lastSentBytes = -1
+    const controller = webdav.createUploadController()
+    activeUploads.set(id, controller)
+    return webdav
+      .uploadFiles(requireConn(connectionId), parentPath, localPaths, (p) => {
+        if (sender.isDestroyed() || p.received === lastSentBytes) return
+        lastSentBytes = p.received
+        const now = Date.now()
+        if (now - lastSent < 150) return
+        lastSent = now
+        sender.send('files:upload:progress', p)
+      }, controller)
+      .finally(() => {
+        // 结束（含取消）时清理登记，避免占用；以当前 controller 为准，防止重复 id 误删。
+        if (activeUploads.get(id) === controller) activeUploads.delete(id)
+      })
+  }
+
+  ipcMain.handle('files:upload', async (e, id: string, connectionId: string, parentPath: string) => {
     const result = await dialog.showOpenDialog({
       title: '选择要上传的文件',
       properties: ['openFile', 'multiSelections']
     })
-    if (result.canceled || result.filePaths.length === 0) return 0
-    return webdav.uploadFiles(requireConn(connectionId), parentPath, result.filePaths)
+    if (result.canceled || result.filePaths.length === 0) return { count: 0, cancelled: false }
+    return runUpload(e, id, connectionId, parentPath, result.filePaths)
+  })
+  // 拖拽上传：渲染进程已解析出本地文件路径，直接按路径上传。
+  ipcMain.handle('files:upload:paths', (e, id: string, connectionId: string, parentPath: string, localPaths: string[]) => {
+    if (!localPaths || localPaths.length === 0) return { count: 0, cancelled: false }
+    return runUpload(e, id, connectionId, parentPath, localPaths)
+  })
+  ipcMain.handle('files:upload:cancel', (_e, id: string) => {
+    const controller = activeUploads.get(id)
+    if (controller) controller.cancel()
+    return Boolean(controller)
   })
   ipcMain.handle('files:delete', (_e, connectionId: string, path: string) =>
     webdav.deleteEntry(requireConn(connectionId), path)
