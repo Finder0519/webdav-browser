@@ -3,7 +3,7 @@ productName: WebDAV 浏览器
 copyright: Copyright © 2026 Finder0519
 
 directories:
-  output: release
+  output: dist
   buildResources: build
 
 files:
@@ -12,7 +12,7 @@ files:
 
 asar: true
 
-# webdav-browser-0.1.0-mac-arm64.dmg
+# webdav-browser-0.1.8-mac-arm64.dmg / webdav-browser-0.1.8-win-x64.exe
 artifactName: ${name}-${version}-${os}-${arch}.${ext}
 
 # 应用图标（源图 ~/Downloads/app-icon.png 派生，生成脚本见 scripts/icon-gen/）：
@@ -37,17 +37,7 @@ mac:
 win:
   icon: build/icon.ico
   target:
-    - target: nsis
-      arch: [x64]
-
-nsis:
-  installerIcon: build/icon.ico
-  uninstallerIcon: build/icon.ico
-  oneClick: false
-  perMachine: false
-  allowToChangeInstallationDirectory: true
-  deleteAppDataOnUninstall: false
-  artifactName: ${name}-${version}-win-${arch}-setup.${ext}
+    - nsis
 
 linux:
   icon: build/icon.png

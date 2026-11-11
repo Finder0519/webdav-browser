@@ -12,7 +12,8 @@
     "build": "electron-vite build",
     "preview": "electron-vite preview",
     "typecheck": "tsc --noEmit",
-    "dist": "electron-vite build && electron-builder --publish never",
+    "dist": "npm run build && electron-builder",
+    "pack": "npm run build && electron-builder --dir",
     "dist:win": "npm run dist -- --win",
     "dist:mac": "npm run dist -- --mac",
     "dist:linux": "npm run dist -- --linux"
