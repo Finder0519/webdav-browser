@@ -1,72 +1,110 @@
 name: Release
 
 on:
+  # push 到 main 自动发布：版本号自动 +0.0.1、打 tag、构建并发布 Release
+  #（只改 docs/*.md 不触发；版本提交由 GITHUB_TOKEN 推送，不会循环触发）
   push:
     branches: [main]
+    paths-ignore: ['docs/**', '*.md']
     tags: ['v*']
+  # 在 Actions 页点 Run workflow 手动发布
   workflow_dispatch:
 
-permissions:
-  contents: write
+# 同一时间只跑一个发布流程，避免版本号与 Release 冲突
+concurrency:
+  group: release
+  cancel-in-progress: false
 
 jobs:
-  # 每次 main 推送或手动触发打包时，自动将版本号（patch）+0.0.1 并回写 package.json 推回仓库。
-  # 推送使用 GITHUB_TOKEN 且提交信息带 [skip ci]，GitHub 不会因此再次触发本工作流。
-  bump-version:
+  prepare:
+    name: 版本号
     runs-on: ubuntu-latest
-    if: github.event_name == 'workflow_dispatch' || (github.event_name == 'push' && github.ref_type == 'branch')
+    permissions:
+      contents: write
     outputs:
-      new_version: ${{ steps.bump.outputs.new_version }}
-      commit_sha: ${{ steps.commit.outputs.commit_sha }}
+      tag: ${{ steps.version.outputs.tag }}
+      version: ${{ steps.version.outputs.version }}
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
+        with:
+          # 需要全部 tag 来计算下一个版本号
+          fetch-depth: 0
 
-      - name: Bump patch version (+0.0.1)
-        id: bump
+      - name: 计算版本号并打 tag
+        id: version
         shell: bash
         run: |
-          node -e '
-            const fs = require("fs");
-            const p = "package.json";
-            const m = JSON.parse(fs.readFileSync(p, "utf8"));
-            const [a, b, c] = m.version.split(".").map(Number);
-            m.version = `${a}.${b}.${c + 1}`;
-            fs.writeFileSync(p, JSON.stringify(m, null, 2) + "\n");
-          '
-          new_version=$(node -p "require('./package.json').version")
-          echo "new_version=$new_version" >> "$GITHUB_OUTPUT"
-          echo "Bumped version to $new_version"
+          set -euo pipefail
 
-      - name: Commit and push version bump
-        id: commit
-        shell: bash
-        run: |
-          new_version="${{ steps.bump.outputs.new_version }}"
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add package.json
-          git commit -m "chore: bump version to v${new_version} [skip ci]"
-          git remote set-url origin "https://x-access-token:${{ github.token }}@github.com/${{ github.repository }}.git"
-          git push origin HEAD:main
-          echo "commit_sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+          if [[ "$GITHUB_REF_TYPE" == "tag" ]]; then
+            # 手动推送 tag：版本号以 tag 为准
+            tag="$GITHUB_REF_NAME"
+            if [[ ! "$tag" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+              echo "tag $tag 不符合 vX.Y.Z 格式，已中止" >&2
+              exit 1
+            fi
+          else
+            # main 可能已前进（并发推送、上次的版本提交），先同步到最新再计算版本号
+            git config user.name "github-actions[bot]"
+            git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+            git fetch --tags origin "$GITHUB_REF_NAME"
+            git rebase "origin/$GITHUB_REF_NAME"
+
+            # 首次 v1.0.0，之后在最新 tag 上 patch +0.0.1
+            latest="$(git tag --list 'v*' --sort=-v:refname | sed -n '1p')"
+            if [[ -z "$latest" ]]; then
+              tag="v1.0.0"
+            else
+              IFS=. read -r major minor patch <<< "${latest#v}"
+              patch="${patch%%[^0-9]*}"
+              tag="v${major}.${minor}.$((patch + 1))"
+            fi
+
+            # 同步 package.json / package-lock.json 版本号（无变化时跳过）并提交
+            # npm version 在版本号不变时会报错，所以先比较再执行
+            if [[ "$(node -p "require('./package.json').version")" != "${tag#v}" ]]; then
+              npm version "${tag#v}" --no-git-tag-version
+              git add package.json package-lock.json
+              git commit -m "chore(release): $tag"
+            fi
+            git tag "$tag"
+            git push origin "HEAD:refs/heads/$GITHUB_REF_NAME" "refs/tags/$tag"
+          fi
+
+          echo "tag=$tag" >> "$GITHUB_OUTPUT"
+          echo "version=${tag#v}" >> "$GITHUB_OUTPUT"
 
   build:
-    needs: bump-version
+    name: '${{ matrix.platform }}'
+    needs: prepare
+    runs-on: ${{ matrix.os }}
+    permissions:
+      contents: read
     strategy:
       fail-fast: false
       matrix:
         include:
           - os: macos-latest
-          - os: ubuntu-latest
+            platform: mac-arm64
+            args: '--mac dmg --arm64'
+          - os: macos-latest
+            platform: mac-x64
+            args: '--mac dmg --x64'
           - os: windows-latest
-    runs-on: ${{ matrix.os }}
+            platform: win
+            args: '--win nsis'
+          - os: ubuntu-latest
+            platform: linux
+            args: '--linux appimage'
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ needs.prepare.outputs.tag }}
 
       - name: Setup Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v7
         with:
           node-version: 22
           cache: npm
@@ -77,70 +115,83 @@ jobs:
       - name: Type check
         run: npm run typecheck
 
-      # 用 bump-version 产出的新版本号覆盖打包元数据，保证三平台产物版本一致；
-      # 推送 v* 标签（不触发 bump）时沿用标签自身版本。
-      - name: Build & package
-        shell: bash
-        run: |
-          extra=""
-          new_version="${{ needs.bump-version.outputs.new_version }}"
-          if [ -n "$new_version" ]; then
-            extra="--c.extraMetadata.version=$new_version"
-          fi
-          npm run dist -- $extra
+      - name: Build with electron-vite
+        run: npm run build
 
-      # 产物上传为 Actions Artifact（手动触发供下载；push 时供发布任务合并）
-      - name: Upload artifact
-        uses: actions/upload-artifact@v4
+      - name: Build for ${{ matrix.platform }}
+        shell: bash
+        env:
+          ARGS: ${{ matrix.args }}
+          VERSION: ${{ needs.prepare.outputs.version }}
+        # 先把 package.json 版本号与 tag 对齐，保证产物文件名版本一致（已一致时跳过）；
+        # --publish never 关闭 electron-builder 自带发布，统一由 release job 发布
+        run: |
+          if [[ "$(node -p "require('./package.json').version")" != "$VERSION" ]]; then
+            npm version "$VERSION" --no-git-tag-version
+          fi
+          npx electron-builder $ARGS --publish never
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v7
         with:
-          name: webdav-browser-${{ matrix.os }}
+          name: 'release-${{ matrix.platform }}'
           path: |
-            release/*.exe
-            release/*.dmg
-            release/*.AppImage
+            dist/*.dmg
+            dist/*.exe
+            dist/*.AppImage
           if-no-files-found: error
 
-  # push（main 或 v* 标签）及手动触发时合并三平台产物，一次性发布 GitHub Release
-  publish:
-    needs: [build, bump-version]
-    if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
+  release:
+    name: 发布 Release
+    needs: [prepare, build]
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
     steps:
-      # 标签 push 检出标签本身；main/手动触发检出 bump 后的提交，使 Release 指向版本号已更新的提交
+      # gh 需要 git 上下文解析远端仓库，否则报 not a git repository
       - name: Checkout
-        uses: actions/checkout@v4
-        with:
-          ref: ${{ needs.bump-version.outputs.commit_sha || github.ref }}
+        uses: actions/checkout@v7
 
       - name: Download artifacts
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
-          pattern: webdav-browser-*
-          path: release
+          path: dist
           merge-multiple: true
 
-      # 确定 Release 标签:
-      #   推送 v* 标签 -> 直接用该标签（正式版）
-      #   推送 main / 手动触发 -> v<版本>，版本为每个触发自动 +0.0.1 递增后的 package.json 版本
-      - name: Release metadata
-        id: meta
+      - name: Create GitHub Release
         shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG: ${{ needs.prepare.outputs.tag }}
+        # ::notice/::error 会写入 check-run annotations，便于从 API 侧诊断
         run: |
-          if [ "$GITHUB_REF_TYPE" = "tag" ]; then
-            tag="$GITHUB_REF_NAME"
-          else
-            version=$(node -p "require('./package.json').version")
-            tag="v$version"
+          set -euo pipefail
+          shopt -s nullglob
+          files=(dist/*.dmg dist/*.exe dist/*.AppImage)
+          echo "::notice::待发布文件: ${files[*]:-（空）}"
+          if [[ ${#files[@]} -eq 0 ]]; then
+            echo "::error::dist 目录下没有找到可发布的安装包，实际内容: $(ls dist 2>&1 | tr '\n' ' ')"
+            exit 1
           fi
-          echo "tag=$tag" >> "$GITHUB_OUTPUT"
 
-      - name: Publish release
-        uses: softprops/action-gh-release@v2
-        with:
-          tag_name: ${{ steps.meta.outputs.tag }}
-          name: WebDAV 浏览器 ${{ steps.meta.outputs.tag }}
-          generate_release_notes: true
-          files: |
-            release/*.exe
-            release/*.dmg
-            release/*.AppImage
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            echo "::notice::Release $TAG 已存在，替换旧产物"
+            # 清掉旧产物再补传，避免新旧文件混杂（重跑、改名场景）
+            while IFS= read -r asset; do
+              [ -n "$asset" ] && gh release delete-asset "$TAG" "$asset" -y
+            done < <(gh release view "$TAG" --json assets -q '.assets[].name')
+            if ! out="$(gh release upload "$TAG" "${files[@]}" --clobber 2>&1)"; then
+              echo "::error::gh release upload 失败: ${out:0:1500}"
+              exit 1
+            fi
+          else
+            echo "::notice::创建 Release $TAG"
+            if ! out="$(gh release create "$TAG" "${files[@]}" --verify-tag --generate-notes --title "$TAG" 2>&1)"; then
+              echo "::error::gh release create 失败: ${out:0:1500}"
+              exit 1
+            fi
+          fi
+
+          # 若存在同名 draft（历史 electron-builder 发布残留），在此转正
+          gh release edit "$TAG" --draft=false >/dev/null 2>&1 || true
+          echo "::notice::发布完成: $(gh release view "$TAG" --json url -q .url 2>/dev/null || echo "$TAG")"
