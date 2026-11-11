@@ -1,4 +1,4 @@
-import { app, BrowserWindow, clipboard, dialog, ipcMain, protocol, shell } from 'electron'
+import { app, BrowserWindow, clipboard, dialog, ipcMain, Menu, protocol, shell, type MenuItemConstructorOptions } from 'electron'
 import { join } from 'path'
 import * as store from './connections'
 import * as webdav from './webdav'
@@ -25,6 +25,69 @@ function requireConn(connectionId: string): Connection {
 }
 
 // 活动下载任务表：id 由渲染进程生成，供进度/控制事件与任务对应。
+// macOS 平台的应用菜单栏（中文）。非 macOS 平台返回 null，保持 autoHideMenuBar 提供的默认行为。
+const APP_NAME = 'WebDAV 浏览器'
+function buildAppMenu(): Menu | null {
+  if (process.platform !== 'darwin') return null
+  const template: MenuItemConstructorOptions[] = [
+    {
+      label: APP_NAME,
+      submenu: [
+        { label: `关于 ${APP_NAME}`, role: 'about', submenu: [] },
+        { type: 'separator' },
+        { label: '服务', role: 'services', submenu: [] },
+        { type: 'separator' },
+        { label: `隐藏 ${APP_NAME}`, role: 'hide' },
+        { label: '隐藏其他', role: 'hideOthers' },
+        { type: 'separator' },
+        { label: `退出 ${APP_NAME}`, role: 'quit' }
+      ]
+    },
+    {
+      label: '文件',
+      role: 'fileMenu',
+      submenu: []
+    },
+    {
+      label: '编辑',
+      submenu: [
+        { label: '撤销', role: 'undo' },
+        { label: '重做', role: 'redo' },
+        { type: 'separator' },
+        { label: '剪切', role: 'cut' },
+        { label: '复制', role: 'copy' },
+        { label: '粘贴', role: 'paste' },
+        { label: '全选', role: 'selectAll' }
+      ]
+    },
+    {
+      label: '视图',
+      submenu: [
+        { label: '重新加载', role: 'reload' },
+        { label: '强制重新加载', role: 'forceReload' },
+        { label: '切换开发者工具', role: 'toggleDevTools' },
+        { type: 'separator' },
+        { label: '实际大小', role: 'resetZoom' },
+        { label: '放大', role: 'zoomIn' },
+        { label: '缩小', role: 'zoomOut' },
+        { type: 'separator' },
+        { label: '切换全屏', role: 'togglefullscreen' }
+      ]
+    },
+    {
+      label: '窗口',
+      submenu: [
+        { label: '最小化', role: 'minimize' },
+        { label: '缩放', role: 'zoom' },
+        { label: '关闭', role: 'close' },
+        { type: 'separator' },
+        { label: '前置全部窗口', role: 'front' }
+      ]
+    }
+  ]
+  return Menu.buildFromTemplate(template)
+}
+
 const activeDownloads = new Map<string, { handle: webdav.DownloadHandle; localPath: string }>()
 
 function createWindow(): void {
@@ -192,6 +255,7 @@ function registerIpcHandlers(): void {
 
 app.whenReady().then(() => {
   registerIpcHandlers()
+  Menu.setApplicationMenu(buildAppMenu())
 
   // 媒体流协议：从 WebDAV 分块输出到 <img>/<audio>/<video>。
   protocol.handle(MEDIA_SCHEME, async (request) => {
