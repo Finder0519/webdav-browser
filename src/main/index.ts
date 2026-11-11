@@ -33,7 +33,7 @@ function buildAppMenu(): Menu | null {
     {
       label: APP_NAME,
       submenu: [
-        { label: `关于 ${APP_NAME}`, role: 'about', submenu: [] },
+        { label: `关于 ${APP_NAME}`, role: 'about' },
         { type: 'separator' },
         { label: `隐藏 ${APP_NAME}`, role: 'hide' },
         { label: '隐藏其他', role: 'hideOthers' },
