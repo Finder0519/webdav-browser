@@ -35,18 +35,11 @@ function buildAppMenu(): Menu | null {
       submenu: [
         { label: `关于 ${APP_NAME}`, role: 'about', submenu: [] },
         { type: 'separator' },
-        { label: '服务', role: 'services', submenu: [] },
-        { type: 'separator' },
         { label: `隐藏 ${APP_NAME}`, role: 'hide' },
         { label: '隐藏其他', role: 'hideOthers' },
         { type: 'separator' },
         { label: `退出 ${APP_NAME}`, role: 'quit' }
       ]
-    },
-    {
-      label: '文件',
-      role: 'fileMenu',
-      submenu: []
     },
     {
       label: '编辑',
@@ -65,7 +58,7 @@ function buildAppMenu(): Menu | null {
       submenu: [
         { label: '重新加载', role: 'reload' },
         { label: '强制重新加载', role: 'forceReload' },
-        { label: '切换开发者工具', role: 'toggleDevTools' },
+        { label: '开发者工具', role: 'toggleDevTools' },
         { type: 'separator' },
         { label: '实际大小', role: 'resetZoom' },
         { label: '放大', role: 'zoomIn' },
